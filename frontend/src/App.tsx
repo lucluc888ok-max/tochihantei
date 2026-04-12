@@ -91,9 +91,19 @@ export default function App() {
   };
 
   const parseTextLocally = (text: string): Partial<ParsedData> => {
+    // 全角→半角の正規化
+    const normalize = (s: string) =>
+      s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30))
+       .replace(/[ａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF41 + 0x61))
+       .replace(/[Ａ-Ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF21 + 0x41))
+       .replace(/[．]/g, '.').replace(/[，]/g, ',').replace(/[％]/g, '%')
+       .replace(/[ｍ]/g, 'm').replace(/[：]/g, ':').replace(/\u3000/g, ' ');
+
+    const t = normalize(text);
+
     const findFloat = (patterns: RegExp[]): number => {
       for (const pat of patterns) {
-        const m = text.match(pat);
+        const m = t.match(pat);
         if (m) return parseFloat(m[1].replace(/,/g, ''));
       }
       return 0;
@@ -101,8 +111,8 @@ export default function App() {
 
     // 住所
     const addressMatch =
-      text.match(/(?:所在地|住所|物件住所)[：:\s]+([東京都].+?)[\n\r]/) ||
-      text.match(/(東京都[\u4e00-\u9fa5\w\d\-ー]+[丁目番地号\-\d]+)/);
+      t.match(/(?:所在地|住所|物件住所)[:\s]+([東京都].+?)[\n\r]/) ||
+      t.match(/(東京都[\u4e00-\u9fa5\w\d\-ー]+[丁目番地号\-\d]+)/);
     const address = addressMatch ? addressMatch[1].trim() : '';
 
     // 面積（㎡優先、坪→換算）
@@ -112,31 +122,49 @@ export default function App() {
       if (tsubo) area_sqm = Math.round(tsubo * 3.305785 * 100) / 100;
     }
 
-    // 容積率
-    const floor_area_ratio = findFloat([/容積率\s*[：:]?\s*([0-9]+)/, /容積\s*([0-9]+)/]);
+    // 用途地域（略称も対応）
+    const ZONE_MAP: Record<string, string> = {
+      '第一種低層住居専用地域': '第一種低層住居専用地域',
+      '第二種低層住居専用地域': '第二種低層住居専用地域',
+      '第一種中高層住居専用地域': '第一種中高層住居専用地域',
+      '第二種中高層住居専用地域': '第二種中高層住居専用地域',
+      '第一種住居地域': '第一種住居地域',
+      '第二種住居地域': '第二種住居地域',
+      '準住居地域': '準住居地域',
+      '近隣商業地域': '近隣商業地域',
+      '近隣商業': '近隣商業地域',
+      '商業地域': '商業地域',
+      '準工業地域': '準工業地域',
+      '準工業': '準工業地域',
+      '工業地域': '工業地域',
+      '工業専用地域': '工業専用地域',
+      '田園住居地域': '田園住居地域',
+    };
+    const land_use_zone = Object.entries(ZONE_MAP).reduce((found, [key, val]) =>
+      found || (t.includes(key) ? val : ''), '');
 
-    // 用途地域
-    const ZONES = [
-      '第一種低層住居専用地域', '第二種低層住居専用地域',
-      '第一種中高層住居専用地域', '第二種中高層住居専用地域',
-      '第一種住居地域', '第二種住居地域', '準住居地域',
-      '近隣商業地域', '商業地域', '準工業地域', '工業地域', '工業専用地域',
-      '田園住居地域',
-    ];
-    const land_use_zone = ZONES.find(z => text.includes(z)) ?? '';
+    // 容積率：ラベルあり優先、なければ%の数値の中で最大のものを採用
+    let floor_area_ratio = findFloat([/容積率\s*:?\s*([0-9]+)/, /容積\s*([0-9]+)/]);
+    if (!floor_area_ratio) {
+      const allPct = [...t.matchAll(/([0-9]+)\s*%/g)].map(m => parseFloat(m[1]));
+      if (allPct.length) floor_area_ratio = Math.max(...allPct);
+    }
 
     // 道路幅員
-    const road_width_m = findFloat([/幅員\s*([0-9\.]+)\s*m/, /道路幅員\s*[：:]?\s*([0-9\.]+)/]);
+    const road_width_m = findFloat([
+      /幅員\s*([0-9\.]+)\s*m/,
+      /道路幅員\s*:?\s*([0-9\.]+)/,
+      /([0-9\.]+)\s*m.*?道路/,
+    ]);
 
     // 仕入目線
     let purchase_price_hint = 0;
-    const oku = text.match(/(?:目線|売価|価格|希望)[：:\s]*([0-9\.]+)\s*億/);
-    const man = text.match(/(?:目線|売価|価格|希望)[：:\s]*([0-9,]+)\s*万/);
+    const oku = t.match(/(?:目線|売価|価格|希望)[:\s]*([0-9\.]+)\s*億/);
+    const man = t.match(/(?:目線|売価|価格|希望)[:\s]*([0-9,]+)\s*万/);
     if (oku) purchase_price_hint = parseFloat(oku[1]) * 1_0000_0000;
     else if (man) purchase_price_hint = parseFloat(man[1].replace(/,/g, '')) * 10000;
 
-    return { address, area_sqm, land_use_zone, floor_area_ratio,
-      road_width_m, purchase_price_hint } as any;
+    return { address, area_sqm, land_use_zone, floor_area_ratio, road_width_m, purchase_price_hint } as any;
   };
 
   const handleParseText = () => {
