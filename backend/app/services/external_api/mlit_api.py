@@ -64,9 +64,9 @@ def fetch_mlit_transaction_data(address: str, target_far: float) -> float:
             print(f"[mlit_api] ローカルデータ使用: {address} (コード:{city_code}) → {result:,.0f}円/坪")
             return result
 
-    # ローカルデータがない or 0件の場合はAPIから取得
-    print(f"[mlit_api] APIから取得: {address} (コード:{city_code})")
-    return _fetch_from_api(city_code, target_far)
+    # ローカルデータがない or 0件の場合はフォールバック値を返す（APIは呼ばない）
+    print(f"[mlit_api] ローカルデータなし。フォールバック値を使用: {address} (コード:{city_code})")
+    return 1_500_000.0
 
 
 def _calc_avg_tsubo_price(transactions: List[dict], target_far: float) -> float:

@@ -118,10 +118,6 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         "revenues": revenues_list
     }
 
-    report_text = _generate_llm_report(
-        req, effective_far, max_floor_area_tsubo, net_area_tsubo, sales_price_per_tsubo
-    )
-
     return SimulatorResponse(
         effective_far=effective_far,
         far_calc_basis=far_calc_basis,
@@ -137,7 +133,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         net_area_sqm=net_area_sqm,
         net_area_tsubo=net_area_tsubo,
         report_data=report_data,
-        report_text=report_text
+        report_text=""
     )
 
 import os
