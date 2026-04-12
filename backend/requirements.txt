@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+google-generativeai
+pandas
+numpy
+matplotlib
+japanize-matplotlib

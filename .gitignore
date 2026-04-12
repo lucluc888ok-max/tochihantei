@@ -1,0 +1,9 @@
+node_modules/
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+.DS_Store
+docs/down/
+docs/transactions.csv
