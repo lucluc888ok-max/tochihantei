@@ -92,7 +92,6 @@ export default function App() {
   const handleParseText = async () => {
     if (!mailText.trim()) return;
     setIsParsing(true);
-    setSimResult(null);
     try {
       const res = await fetch(`${BASE_URL}/api/parse-text`, {
         method: 'POST',
@@ -102,16 +101,10 @@ export default function App() {
       if (!res.ok) throw new Error(res.statusText);
       const parsed: ParsedData = (await res.json()).data;
       applyParsedData(parsed);
-      // テキスト解析後に即シミュレーション
-      const rw = (parsed as any).road_width_m > 0 ? String((parsed as any).road_width_m) : roadWidth;
-      const pp = (parsed as any).purchase_price_hint > 0
-        ? String(Math.round((parsed as any).purchase_price_hint / 10000))
-        : purchasePriceInput;
-      const result = await runSimulation(parsed, rw, pp, assemblyCostInput);
-      setSimResult(result);
+      // フィールド反映のみ。シミュレーションは「シミュレーション実行」ボタンで行う
     } catch (err) {
       console.error(err);
-      alert('テキストの解析に失敗しました。');
+      alert('テキストの解析に失敗しました。サーバーが起動しているか確認してください。');
     } finally {
       setIsParsing(false);
     }
@@ -213,9 +206,9 @@ export default function App() {
               className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2"
             >
               {isParsing ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />解析中...</>
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />読み取り中...</>
               ) : (
-                <><Mail className="w-4 h-4" />AIで解析して入力欄に反映</>
+                <><Mail className="w-4 h-4" />入力欄に反映する</>
               )}
             </button>
           </div>
