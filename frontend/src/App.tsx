@@ -29,6 +29,9 @@ interface SimResult {
   effective_far: number;
   far_calc_basis: string;
   market_price_per_tsubo: number;
+  condo_market_price_per_tsubo: number;
+  sales_price_per_tsubo: number;
+  land_exit_total: number;
   purchase_price: number | null;
   purchase_price_per_tsubo: number | null;
   profit_total: number | null;
@@ -46,9 +49,10 @@ export default function App() {
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [roadWidth, setRoadWidth] = useState<string>('4.0');
   const [purchasePriceInput, setPurchasePriceInput] = useState<string>('');
+  const [assemblyCostInput, setAssemblyCostInput] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string) => {
+  const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac?: string) => {
     const payload: Record<string, unknown> = {
       address: parsed.address,
       area_sqm: parsed.area_sqm,
@@ -59,6 +63,10 @@ export default function App() {
     const ppNum = parseFloat(pp) * 10000;
     if (pp.trim() && !isNaN(ppNum) && ppNum > 0) {
       payload.purchase_price = ppNum;
+    }
+    const acNum = parseFloat(assemblyCostInput) * 10000;
+    if (assemblyCostInput.trim() && !isNaN(acNum) && acNum > 0) {
+      payload.assembly_cost = acNum;
     }
     const res = await fetch(`${BASE_URL}/api/simulate`, {
       method: 'POST',
@@ -83,7 +91,7 @@ export default function App() {
       if (!res.ok) throw new Error(res.statusText);
       const parsed: ParsedData = (await res.json()).data;
       setParsedData(parsed);
-      const result = await runSimulation(parsed, roadWidth, purchasePriceInput);
+      const result = await runSimulation(parsed, roadWidth, purchasePriceInput, assemblyCostInput);
       setSimResult(result);
     } catch (err) {
       console.error(err);
@@ -96,7 +104,7 @@ export default function App() {
   const handleSimulate = async () => {
     if (!parsedData) return;
     try {
-      const result = await runSimulation(parsedData, roadWidth, purchasePriceInput);
+      const result = await runSimulation(parsedData, roadWidth, purchasePriceInput, assemblyCostInput);
       setSimResult(result);
     } catch (err) {
       console.error(err);
@@ -259,6 +267,19 @@ export default function App() {
                   className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-500 placeholder-gray-600"
                 />
               </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">
+                  地上げ費
+                  <span className="text-gray-600 ml-1">（万円・任意）</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="例: 60000　※未提示の場合は空欄"
+                  value={assemblyCostInput}
+                  onChange={e => setAssemblyCostInput(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                />
+              </div>
               <button
                 onClick={handleSimulate}
                 disabled={!parsedData}
@@ -362,9 +383,24 @@ export default function App() {
                 </div>
               </div>
 
+              {/* 土地出口 */}
+              <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 p-3">
+                <p className="text-xs text-gray-500 mb-2">土地出口（更地売却想定）</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">
+                    宅地相場 {(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪 × {(simResult.max_floor_area_sqm / simResult.effective_far * 100 / TSUBO_RATIO).toFixed(1)}坪
+                  </span>
+                  <span className="text-base font-bold font-mono text-gray-200">
+                    {(simResult.land_exit_total / 10000).toLocaleString()}万円
+                  </span>
+                </div>
+              </div>
+
               {/* 相場メモ */}
-              <div className="flex gap-4 text-xs text-gray-500">
-                <span>周辺相場: <span className="text-gray-300 font-mono">{(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
+              <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                <span>宅地相場: <span className="text-gray-300 font-mono">{(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
+                <span>中古マンション相場: <span className="text-gray-300 font-mono">{(simResult.condo_market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
+                <span>出口坪単価: <span className="text-blue-300 font-mono">{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>（×1.4）</span>
                 {simResult.purchase_price_per_tsubo != null && (
                   <span>提示仕入坪単価: <span className="text-yellow-300 font-mono">{(simResult.purchase_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 )}
