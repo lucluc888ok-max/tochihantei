@@ -12,11 +12,13 @@ interface ParsedData {
   area_sqm: number;
   land_use_zone: string;
   floor_area_ratio: number;
+  road_width_m: number;
   is_leasehold: boolean;
   leasehold_ratio: number;
   road_type: string;
   setback_area_estimated: number;
   market_price_per_tsubo: number;
+  purchase_price_hint: number;
 }
 
 interface CostDetail {
@@ -51,7 +53,6 @@ export default function App() {
   const [purchasePriceInput, setPurchasePriceInput] = useState<string>('');
   const [assemblyCostInput, setAssemblyCostInput] = useState<string>('');
   const [mailText, setMailText] = useState<string>('');
-  const [isParsing, setIsParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac?: string) => {
@@ -89,25 +90,74 @@ export default function App() {
     }
   };
 
-  const handleParseText = async () => {
-    if (!mailText.trim()) return;
-    setIsParsing(true);
-    try {
-      const res = await fetch(`${BASE_URL}/api/parse-text`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: mailText }),
-      });
-      if (!res.ok) throw new Error(res.statusText);
-      const parsed: ParsedData = (await res.json()).data;
-      applyParsedData(parsed);
-      // フィールド反映のみ。シミュレーションは「シミュレーション実行」ボタンで行う
-    } catch (err) {
-      console.error(err);
-      alert('テキストの解析に失敗しました。サーバーが起動しているか確認してください。');
-    } finally {
-      setIsParsing(false);
+  const parseTextLocally = (text: string): Partial<ParsedData> => {
+    const findFloat = (patterns: RegExp[]): number => {
+      for (const pat of patterns) {
+        const m = text.match(pat);
+        if (m) return parseFloat(m[1].replace(/,/g, ''));
+      }
+      return 0;
+    };
+
+    // 住所
+    const addressMatch =
+      text.match(/(?:所在地|住所|物件住所)[：:\s]+([東京都].+?)[\n\r]/) ||
+      text.match(/(東京都[\u4e00-\u9fa5\w\d\-ー]+[丁目番地号\-\d]+)/);
+    const address = addressMatch ? addressMatch[1].trim() : '';
+
+    // 面積（㎡優先、坪→換算）
+    let area_sqm = findFloat([/([0-9,\.]+)\s*㎡/]);
+    if (!area_sqm) {
+      const tsubo = findFloat([/([0-9,\.]+)\s*坪/]);
+      if (tsubo) area_sqm = Math.round(tsubo * 3.305785 * 100) / 100;
     }
+
+    // 容積率
+    const floor_area_ratio = findFloat([/容積率\s*[：:]?\s*([0-9]+)/, /容積\s*([0-9]+)/]);
+
+    // 用途地域
+    const ZONES = [
+      '第一種低層住居専用地域', '第二種低層住居専用地域',
+      '第一種中高層住居専用地域', '第二種中高層住居専用地域',
+      '第一種住居地域', '第二種住居地域', '準住居地域',
+      '近隣商業地域', '商業地域', '準工業地域', '工業地域', '工業専用地域',
+      '田園住居地域',
+    ];
+    const land_use_zone = ZONES.find(z => text.includes(z)) ?? '';
+
+    // 道路幅員
+    const road_width_m = findFloat([/幅員\s*([0-9\.]+)\s*m/, /道路幅員\s*[：:]?\s*([0-9\.]+)/]);
+
+    // 仕入目線
+    let purchase_price_hint = 0;
+    const oku = text.match(/(?:目線|売価|価格|希望)[：:\s]*([0-9\.]+)\s*億/);
+    const man = text.match(/(?:目線|売価|価格|希望)[：:\s]*([0-9,]+)\s*万/);
+    if (oku) purchase_price_hint = parseFloat(oku[1]) * 1_0000_0000;
+    else if (man) purchase_price_hint = parseFloat(man[1].replace(/,/g, '')) * 10000;
+
+    return { address, area_sqm, land_use_zone, floor_area_ratio,
+      road_width_m, purchase_price_hint } as any;
+  };
+
+  const handleParseText = () => {
+    if (!mailText.trim()) return;
+    const extracted = parseTextLocally(mailText);
+
+    // フィールドに反映
+    const dummy: ParsedData = {
+      address: extracted.address ?? '',
+      area_sqm: extracted.area_sqm ?? 0,
+      land_use_zone: extracted.land_use_zone ?? '',
+      floor_area_ratio: extracted.floor_area_ratio ?? 0,
+      road_width_m: (extracted as any).road_width_m ?? 0,
+      is_leasehold: false,
+      leasehold_ratio: 100,
+      road_type: '',
+      setback_area_estimated: 0,
+      market_price_per_tsubo: 0,
+      purchase_price_hint: (extracted as any).purchase_price_hint ?? 0,
+    } as any;
+    applyParsedData(dummy);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,14 +252,10 @@ export default function App() {
             />
             <button
               onClick={handleParseText}
-              disabled={!mailText.trim() || isParsing}
+              disabled={!mailText.trim()}
               className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2"
             >
-              {isParsing ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />読み取り中...</>
-              ) : (
-                <><Mail className="w-4 h-4" />入力欄に反映する</>
-              )}
+              <Mail className="w-4 h-4" />入力欄に反映する
             </button>
           </div>
 
