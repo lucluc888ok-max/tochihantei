@@ -54,9 +54,10 @@ export default function App() {
   const [purchasePriceInput, setPurchasePriceInput] = useState<string>('');
   const [assemblyCostInput, setAssemblyCostInput] = useState<string>('');
   const [mailText, setMailText] = useState<string>('');
+  const [isSimulating, setIsSimulating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac?: string) => {
+  const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac: string) => {
     const payload: Record<string, unknown> = {
       address: parsed.address,
       area_sqm: parsed.area_sqm,
@@ -68,8 +69,8 @@ export default function App() {
     if (pp.trim() && !isNaN(ppNum) && ppNum > 0) {
       payload.purchase_price = ppNum;
     }
-    const acNum = parseFloat(assemblyCostInput) * 10000;
-    if (assemblyCostInput.trim() && !isNaN(acNum) && acNum > 0) {
+    const acNum = parseFloat(ac) * 10000;
+    if (ac.trim() && !isNaN(acNum) && acNum > 0) {
       payload.assembly_cost = acNum;
     }
     const res = await fetch(`${BASE_URL}/api/simulate`, {
@@ -77,7 +78,10 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail?.detail ?? res.statusText);
+    }
     return (await res.json()) as SimResult;
   }, []);
 
@@ -224,12 +228,16 @@ export default function App() {
 
   const handleSimulate = async () => {
     if (!parsedData) return;
+    setIsSimulating(true);
     try {
       const result = await runSimulation(parsedData, roadWidth, purchasePriceInput, assemblyCostInput);
       setSimResult(result);
     } catch (err) {
       console.error(err);
-      alert('シミュレーションに失敗しました。');
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`シミュレーションに失敗しました。\n\nサーバーが起動しているか確認してください。\n詳細: ${msg}`);
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -432,10 +440,15 @@ export default function App() {
               </div>
               <button
                 onClick={handleSimulate}
-                disabled={!parsedData}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors"
+                disabled={!parsedData || isSimulating}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2"
               >
-                シミュレーション実行
+                {isSimulating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    計算中...
+                  </>
+                ) : 'シミュレーション実行'}
               </button>
             </div>
           </div>
