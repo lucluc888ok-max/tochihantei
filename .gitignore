@@ -8,6 +8,5 @@ venv/
 docs/down/
 docs/transactions.csv
 
-# 取得データ（143MB超のためGit管理外。fetch_tokyo_data.pyで再生成）
-backend/data/tokyo_transactions.json
+# 取得ログ
 backend/data/fetch_log.txt
