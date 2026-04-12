@@ -11,6 +11,7 @@ interface ParsedData {
   address: string;
   area_sqm: number;
   land_use_zone: string;
+  coverage_ratio: number;
   floor_area_ratio: number;
   road_width_m: number;
   is_leasehold: boolean;
@@ -143,11 +144,17 @@ export default function App() {
     const land_use_zone = Object.entries(ZONE_MAP).reduce((found, [key, val]) =>
       found || (t.includes(key) ? val : ''), '');
 
-    // 容積率：ラベルあり優先、なければ%の数値の中で最大のものを採用
+    // 容積率・建蔽率：ラベルあり優先、なければ%の大きい方=容積率・小さい方=建蔽率
     let floor_area_ratio = findFloat([/容積率\s*:?\s*([0-9]+)/, /容積\s*([0-9]+)/]);
+    let coverage_ratio   = findFloat([/建蔽率\s*:?\s*([0-9]+)/, /建蔽\s*([0-9]+)/]);
     if (!floor_area_ratio) {
-      const allPct = [...t.matchAll(/([0-9]+)\s*%/g)].map(m => parseFloat(m[1]));
-      if (allPct.length) floor_area_ratio = Math.max(...allPct);
+      const allPct = [...t.matchAll(/([0-9]+)\s*%/g)].map(m => parseFloat(m[1])).sort((a, b) => a - b);
+      if (allPct.length >= 2) {
+        coverage_ratio   = allPct[0];            // 小さい方 = 建蔽率
+        floor_area_ratio = allPct[allPct.length - 1]; // 大きい方 = 容積率
+      } else if (allPct.length === 1) {
+        floor_area_ratio = allPct[0];
+      }
     }
 
     // 道路幅員
@@ -164,7 +171,7 @@ export default function App() {
     if (oku) purchase_price_hint = parseFloat(oku[1]) * 1_0000_0000;
     else if (man) purchase_price_hint = parseFloat(man[1].replace(/,/g, '')) * 10000;
 
-    return { address, area_sqm, land_use_zone, floor_area_ratio, road_width_m, purchase_price_hint } as any;
+    return { address, area_sqm, land_use_zone, coverage_ratio, floor_area_ratio, road_width_m, purchase_price_hint } as any;
   };
 
   const handleParseText = () => {
@@ -176,6 +183,7 @@ export default function App() {
       address: extracted.address ?? '',
       area_sqm: extracted.area_sqm ?? 0,
       land_use_zone: extracted.land_use_zone ?? '',
+      coverage_ratio: (extracted as any).coverage_ratio ?? 0,
       floor_area_ratio: extracted.floor_area_ratio ?? 0,
       road_width_m: (extracted as any).road_width_m ?? 0,
       is_leasehold: false,
@@ -344,9 +352,14 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gray-800/30 p-3 rounded-md border border-gray-700/50">
-                    <p className="text-xs text-gray-500 mb-1">用途地域 / 容積率</p>
+                    <p className="text-xs text-gray-500 mb-1">用途地域</p>
                     <p className="text-sm">{parsedData.land_use_zone || '－'}</p>
-                    <p className="text-xs font-mono text-gray-400 mt-1">容積率: {parsedData.floor_area_ratio}%</p>
+                    <div className="flex gap-2 mt-1">
+                      {parsedData.coverage_ratio > 0 && (
+                        <p className="text-xs font-mono text-gray-400">建蔽率: {parsedData.coverage_ratio}%</p>
+                      )}
+                      <p className="text-xs font-mono text-gray-400">容積率: {parsedData.floor_area_ratio}%</p>
+                    </div>
                   </div>
                   {parsedData.setback_area_estimated > 0 ? (
                     <div className="bg-orange-900/20 p-3 rounded-md border border-orange-800/30 relative">
