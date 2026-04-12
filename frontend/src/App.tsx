@@ -74,7 +74,7 @@ export default function App() {
       payload.assembly_cost = acNum;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timer = setTimeout(() => controller.abort(), 90000);
     let res: Response;
     try {
       res = await fetch(`${BASE_URL}/api/simulate`, {
