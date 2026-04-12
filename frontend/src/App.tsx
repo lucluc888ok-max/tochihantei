@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { UploadCloud, FileText, CheckCircle2, TrendingUp, Calculator, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, TrendingUp, Calculator, AlertCircle, Mail } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
@@ -50,6 +50,8 @@ export default function App() {
   const [roadWidth, setRoadWidth] = useState<string>('4.0');
   const [purchasePriceInput, setPurchasePriceInput] = useState<string>('');
   const [assemblyCostInput, setAssemblyCostInput] = useState<string>('');
+  const [mailText, setMailText] = useState<string>('');
+  const [isParsing, setIsParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac?: string) => {
@@ -77,6 +79,44 @@ export default function App() {
     return (await res.json()) as SimResult;
   }, []);
 
+  const applyParsedData = (parsed: ParsedData) => {
+    setParsedData(parsed);
+    if (parsed.road_width_m && parsed.road_width_m > 0) {
+      setRoadWidth(String(parsed.road_width_m));
+    }
+    if ((parsed as any).purchase_price_hint && (parsed as any).purchase_price_hint > 0) {
+      setPurchasePriceInput(String(Math.round((parsed as any).purchase_price_hint / 10000)));
+    }
+  };
+
+  const handleParseText = async () => {
+    if (!mailText.trim()) return;
+    setIsParsing(true);
+    setSimResult(null);
+    try {
+      const res = await fetch(`${BASE_URL}/api/parse-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: mailText }),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const parsed: ParsedData = (await res.json()).data;
+      applyParsedData(parsed);
+      // テキスト解析後に即シミュレーション
+      const rw = (parsed as any).road_width_m > 0 ? String((parsed as any).road_width_m) : roadWidth;
+      const pp = (parsed as any).purchase_price_hint > 0
+        ? String(Math.round((parsed as any).purchase_price_hint / 10000))
+        : purchasePriceInput;
+      const result = await runSimulation(parsed, rw, pp, assemblyCostInput);
+      setSimResult(result);
+    } catch (err) {
+      console.error(err);
+      alert('テキストの解析に失敗しました。');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
@@ -90,8 +130,10 @@ export default function App() {
       const res = await fetch(`${BASE_URL}/api/parse-pdf`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error(res.statusText);
       const parsed: ParsedData = (await res.json()).data;
-      setParsedData(parsed);
-      const result = await runSimulation(parsed, roadWidth, purchasePriceInput, assemblyCostInput);
+      applyParsedData(parsed);
+      // PDFはroad_widthを優先。なければ既存の入力値を使う
+      const rw = (parsed as any).road_width_m > 0 ? String((parsed as any).road_width_m) : roadWidth;
+      const result = await runSimulation(parsed, rw, purchasePriceInput, assemblyCostInput);
       setSimResult(result);
     } catch (err) {
       console.error(err);
@@ -151,11 +193,39 @@ export default function App() {
         {/* ===== 左カラム ===== */}
         <div className="flex flex-col gap-6">
 
+          {/* メール貼り付け */}
+          <div className="bg-[#121214] rounded-xl border border-gray-800 p-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Mail className="w-5 h-5 text-gray-400" />
+              <span>①メール・テキストから読み込む</span>
+              <span className="text-xs text-gray-600 font-normal ml-1">（物件概要・住所・価格を自動抽出）</span>
+            </h2>
+            <textarea
+              value={mailText}
+              onChange={e => setMailText(e.target.value)}
+              placeholder={'メール本文や物件概要をここに貼り付け...\n\n例：\n住所: 東京都豊島区池袋3丁目38-3\n面積: 312.63㎡\n用途地域: 近隣商業 容積率300%\n道路幅員: 4.5m\n目線: 1億円'}
+              className="w-full bg-[#1a1a1e] border border-gray-700 rounded-lg px-4 py-3 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none font-mono"
+              rows={6}
+            />
+            <button
+              onClick={handleParseText}
+              disabled={!mailText.trim() || isParsing}
+              className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              {isParsing ? (
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />解析中...</>
+              ) : (
+                <><Mail className="w-4 h-4" />AIで解析して入力欄に反映</>
+              )}
+            </button>
+          </div>
+
           {/* PDF アップロード */}
           <div className="bg-[#121214] rounded-xl border border-gray-800 p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <UploadCloud className="w-5 h-5 text-gray-400" />
-              物件概要書（PDF）読み込み
+              <span>②物件概要書（PDF）で詳細化</span>
+              <span className="text-xs text-gray-600 font-normal ml-1">（任意・①の情報を上書き精緻化）</span>
             </h2>
             <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
             <div

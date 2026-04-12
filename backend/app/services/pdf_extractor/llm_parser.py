@@ -1,27 +1,44 @@
 import os
-import json
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv() # .envファイル等からの環境変数を明示的にロード
+load_dotenv()
 
 class PropertyDataSchema(BaseModel):
     address: str = Field(..., description="物件の所在地（例: 東京都三鷹市井の頭3丁目）。不明な場合は空文字")
     area_sqm: float = Field(..., description="全体面積 (㎡)。小数第2位まで記載。不明な場合は0")
-    land_use_zone: str = Field(..., description="用途地域など (例: 第1種低層住居専用地域)")
+    land_use_zone: str = Field(..., description="用途地域（例: 第1種低層住居専用地域、近隣商業地域）。不明な場合は空文字")
     floor_area_ratio: float = Field(..., description="容積率 (%)。不明な場合は0")
+    road_width_m: float = Field(default=0.0, description="前面道路の幅員（m）。複数ある場合は最大のものを記載。不明な場合は0")
     is_leasehold: bool = Field(..., description="底地権や借地権など、所有権以外の特殊権利が存在するか")
-    leasehold_ratio: float = Field(..., description="底地権割合等 (%)。記載がない場合は100 (100%所有権として扱う)")
-    road_type: str = Field(..., description="接道状況 (例: 2項道路、北東側1.47〜2.74mなど)")
-    setback_area_estimated: float = Field(..., description="接道条件（2項道路等）を見てセットバックが必要と判断される場合、その推定控除面積(㎡)。計算できなければ0")
+    leasehold_ratio: float = Field(..., description="底地権割合等 (%)。記載がない場合は100")
+    road_type: str = Field(..., description="接道状況の説明文（例: 南側 法42条1項1号道路 幅員5.0mなど）。不明な場合は空文字")
+    setback_area_estimated: float = Field(..., description="2項道路など幅員4m未満の場合のセットバック推定面積(㎡)。不要な場合は0")
+    purchase_price_hint: float = Field(default=0.0, description="メール等に記載された仕入れ目線・希望価格（円）。記載がない場合は0")
     market_price_per_tsubo: float = Field(default=0.0, description="後処理で上書きされる。AIは0を返してよい")
 
+
+_EXTRACT_PROMPT = """
+あなたは熟練の不動産鑑定士です。
+以下の不動産物件情報を解析し、指定のJSONスキーマに従ってデータを抽出してください。
+
+抽出ルール：
+- 面積は㎡で返す（坪表記のみの場合は ×3.305785 で換算）
+- 容積率は%の数値のみ（「400%」→ 400）
+- 前面道路幅員はメートルの数値のみ（「5.0m」→ 5.0）
+- 仕入れ目線・希望価格・売出価格が記載されていれば purchase_price_hint に円で返す（「2億」→ 200000000）
+- 2項道路など幅員4m未満の場合、セットバック面積を（4m-現況幅員）/2 × 概算間口 で推定する
+- 不明な項目はデフォルト値（空文字・0・false）を返す
+"""
+
+
 def extract_property_data_with_llm(pdf_bytes: bytes) -> PropertyDataSchema:
+    """PDFから物件情報を抽出する"""
     api_key = os.environ.get("GEMINI_API_KEY")
-    
-    # 手動モックフォールバック
+
     if not api_key:
         print("[LLM Parser] GEMINI_API_KEYが未設定のためデモデータを返します。")
         return PropertyDataSchema(
@@ -29,29 +46,21 @@ def extract_property_data_with_llm(pdf_bytes: bytes) -> PropertyDataSchema:
             area_sqm=1206.54,
             land_use_zone="第1種低層住居専用地域",
             floor_area_ratio=80.0,
+            road_width_m=3.0,
             is_leasehold=True,
             leasehold_ratio=40.0,
             road_type="2項道路 (幅員約1.47〜2.74m)",
             setback_area_estimated=14.21,
+            purchase_price_hint=0.0,
             market_price_per_tsubo=0.0
         )
-        
+
     try:
-        # 新しい google-genai SDKのクライアント初期化
         client = genai.Client(api_key=api_key)
-        
-        prompt = """
-        あなたは熟練の不動産鑑定士およびデータ抽出AIです。
-        アップロードされた不動産物件概要書（PDF）を1文字残らず解析し、以下のデータスキーマに沿ってJSONで返却してください。
-        欠損している値がある場合は文脈から補うか、合理的に推定して計算してください。
-        セットバック面積については、2項道路など幅員が4m未満の場合、（4m - 現状幅員）/2 × 概算間口 で計算してください。
-        """
-        
-        # 構造化出力（JSON Schema）を指定してモデルを呼び出す
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[
-                prompt,
+                _EXTRACT_PROMPT,
                 types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
             ],
             config=types.GenerateContentConfig(
@@ -59,20 +68,69 @@ def extract_property_data_with_llm(pdf_bytes: bytes) -> PropertyDataSchema:
                 response_schema=PropertyDataSchema
             )
         )
-        
         return PropertyDataSchema.model_validate_json(response.text)
-        
+
     except Exception as e:
-        print(f"Error calling Gemini LLM via new SDK: {e}")
-        # もしAPIキーが不正などのエラーになった場合はモックを返してUIを止めないようにする
+        print(f"[LLM Parser] PDF解析エラー: {e}")
         return PropertyDataSchema(
             address="",
-            area_sqm=1200.0,
-            land_use_zone=f"解析エラー: {str(e)[:20]}",
-            floor_area_ratio=80.0,
+            area_sqm=0.0,
+            land_use_zone="",
+            floor_area_ratio=0.0,
+            road_width_m=0.0,
             is_leasehold=False,
             leasehold_ratio=100.0,
-            road_type="エラー",
+            road_type="",
             setback_area_estimated=0.0,
+            purchase_price_hint=0.0,
+            market_price_per_tsubo=0.0
+        )
+
+
+def extract_property_data_from_text(text: str) -> PropertyDataSchema:
+    """メール・テキストから物件情報を抽出する"""
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        print("[LLM Parser] GEMINI_API_KEYが未設定のためデモデータを返します。")
+        return PropertyDataSchema(
+            address="東京都文京区大塚3丁目41-14",
+            area_sqm=600.99,
+            land_use_zone="準工業地域",
+            floor_area_ratio=400.0,
+            road_width_m=5.0,
+            is_leasehold=False,
+            leasehold_ratio=100.0,
+            road_type="",
+            setback_area_estimated=0.0,
+            purchase_price_hint=200000000.0,
+            market_price_per_tsubo=0.0
+        )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"{_EXTRACT_PROMPT}\n\n---\n{text}",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=PropertyDataSchema
+            )
+        )
+        return PropertyDataSchema.model_validate_json(response.text)
+
+    except Exception as e:
+        print(f"[LLM Parser] テキスト解析エラー: {e}")
+        return PropertyDataSchema(
+            address="",
+            area_sqm=0.0,
+            land_use_zone="",
+            floor_area_ratio=0.0,
+            road_width_m=0.0,
+            is_leasehold=False,
+            leasehold_ratio=100.0,
+            road_type="",
+            setback_area_estimated=0.0,
+            purchase_price_hint=0.0,
             market_price_per_tsubo=0.0
         )
