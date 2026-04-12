@@ -112,6 +112,49 @@ def _calc_avg_tsubo_price(transactions: List[dict], target_far: float) -> float:
     return 0.0
 
 
+def fetch_condo_market_price(address: str) -> float:
+    """
+    中古マンション等の取引データから平均坪単価を返す。
+    新築分譲の出口価格算出に使用（× 1.4 で新築プレミアムを加算）。
+    """
+    city_code = get_city_code_from_address(address)
+    local_data = _load_local_data()
+    if city_code in local_data:
+        result = _calc_condo_avg_tsubo_price(local_data[city_code])
+        if result > 0:
+            return result
+    return 0.0
+
+
+def _calc_condo_avg_tsubo_price(transactions: List[dict]) -> float:
+    """中古マンション等の取引から平均坪単価を算出する"""
+    total = 0.0
+    count = 0
+
+    for item in transactions:
+        if item.get("Type") != "中古マンション等":
+            continue
+
+        trade_price_str = item.get("TradePrice") or "0"
+        area_str = item.get("Area") or "0"
+
+        try:
+            trade_price = float(trade_price_str)
+            area = float(str(area_str).replace("㎡以上", "").replace(",", ""))
+        except ValueError:
+            continue
+
+        if area <= 0 or trade_price <= 0:
+            continue
+
+        sqm_price = trade_price / area
+        tsubo_price = sqm_price * 3.305785
+        total += tsubo_price
+        count += 1
+
+    return total / count if count > 0 else 0.0
+
+
 def _fetch_from_api(city_code: str, target_far: float) -> float:
     """APIから過去5年分を取得して平均坪単価を返す"""
     current_year = datetime.datetime.now().year

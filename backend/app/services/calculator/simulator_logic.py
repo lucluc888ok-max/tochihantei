@@ -1,6 +1,6 @@
 import math
 from app.models.simulator_models import SimulatorRequest, SimulatorResponse, CostDetail
-from app.services.external_api.mlit_api import fetch_mlit_transaction_data
+from app.services.external_api.mlit_api import fetch_mlit_transaction_data, fetch_condo_market_price
 
 # 定数
 TSUBO_SQM_RATIO = 3.305785
@@ -18,45 +18,44 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     effective_far = min(req.far_limit, calculated_far)
     far_calc_basis = f"前面道路幅員({req.road_width}m) × {'0.4' if is_residential else '0.6'} × 100 = {calculated_far:.1f}% と指定容積率({req.far_limit}%)の低い方を採用"
 
-    # 2. 周辺相場の平均値（API参照）
-    # APIから平均坪単価を取得（ここは想定エンド価格に近いイメージ）
-    market_price_per_tsubo = fetch_mlit_transaction_data(req.address, effective_far)
+    # 2. 相場取得
+    market_price_per_tsubo = fetch_mlit_transaction_data(req.address, effective_far)  # 宅地相場
+    condo_market_price = fetch_condo_market_price(req.address)                         # 中古マンション相場
 
-    # 3. 面積と収支の計算
+    # 3. 面積計算
     max_floor_area_sqm = req.area_sqm * (effective_far / 100.0)
     max_floor_area_tsubo = max_floor_area_sqm / TSUBO_SQM_RATIO
-    
     net_area_sqm = max_floor_area_sqm * RENTABLE_RATIO
     net_area_tsubo = net_area_sqm / TSUBO_SQM_RATIO
+    land_area_tsubo = req.area_sqm / TSUBO_SQM_RATIO
 
-    # 【収入：売上】
-    # 想定出口価格 = 専有坪数 × 販売坪単価(APIから取得した周辺相場を元にする)
-    # ここでは周辺相場の取引価格を1.2倍程度して新築販売価格にモックするか、そのまま使用する。
-    # ユーザーの提示例「専有209坪 × 販売坪単価500万円 = 10.5億円」に沿った計算
-    sales_price_per_tsubo = market_price_per_tsubo * 1.5 # 新築プレミアムとして仮に1.5倍
-    # もし市場相場が低すぎる場合は、提示例の500万円に近い数字を出すために以下のように調整（デモ用）
-    if sales_price_per_tsubo < 3000000:
-        sales_price_per_tsubo = 5000000.0 # フォールバック
+    # 【出口価格】
+    # 中古マンション相場 × 1.4（新築プレミアム）。データなければ宅地相場 × 1.2 でフォールバック
+    if condo_market_price > 0:
+        sales_price_per_tsubo = condo_market_price * 1.4
+    else:
+        sales_price_per_tsubo = market_price_per_tsubo * 1.2
 
     total_sales = net_area_tsubo * sales_price_per_tsubo
 
+    # 土地出口（更地売却）= 宅地相場 × 土地坪数
+    land_exit_total = market_price_per_tsubo * land_area_tsubo
+
     # 【支出：原価】
-    # 建築費（本体＋付帯）: 延床坪数 × 坪160万円
     construction_cost = max_floor_area_tsubo * DEFAULT_CONSTRUCTION_COST_PER_TSUBO
 
-    # 仕入価格（デベロッパー提示があれば使用、なければNone）
     purchase_price = req.purchase_price
-    land_area_tsubo = req.area_sqm / TSUBO_SQM_RATIO
+    assembly_cost = req.assembly_cost
     purchase_price_per_tsubo = purchase_price / land_area_tsubo if (purchase_price and land_area_tsubo > 0) else None
 
-    # 諸経費：（建築費 ＋ 仕入価格）× 10%
-    # 仕入提示がない場合は建築費のみをベースにする
-    cost_base = construction_cost + (purchase_price or 0)
+    # 諸経費：（仕入 ＋ 地上げ費 ＋ 建築費）× 10%
+    cost_base = construction_cost + (purchase_price or 0) + (assembly_cost or 0)
     misc_expenses = cost_base * 0.10
 
     # 利益・利益率（仕入提示がある場合のみ算出）
     if purchase_price is not None:
-        profit_total = total_sales - purchase_price - construction_cost - misc_expenses
+        all_costs = purchase_price + (assembly_cost or 0) + construction_cost + misc_expenses
+        profit_total = total_sales - all_costs
         profit_margin = (profit_total / total_sales * 100) if total_sales > 0 else 0.0
     else:
         profit_total = None
@@ -65,6 +64,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 4. レポート表の組み立て
     expenses_list = []
 
+    # 土地仕入原価
     if purchase_price is not None:
         expenses_list.append(CostDetail(
             name="土地仕入原価",
@@ -78,6 +78,20 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
             note="ー（デベロッパーより提示待ち）"
         ))
 
+    # 地上げ費
+    if assembly_cost is not None:
+        expenses_list.append(CostDetail(
+            name="地上げ費",
+            amount=assembly_cost,
+            note="デベロッパー提示"
+        ))
+    else:
+        expenses_list.append(CostDetail(
+            name="地上げ費",
+            amount=0,
+            note="ー（デベロッパーより提示待ち）"
+        ))
+
     expenses_list += [
         CostDetail(
             name="建築費（本体＋付帯）",
@@ -87,7 +101,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         CostDetail(
             name="設計・諸経費・金利",
             amount=misc_expenses,
-            note=f"原価（{'仕入＋' if purchase_price else ''}建築費）の約10%"
+            note="原価（仕入＋地上げ＋建築費）の約10%"
         )
     ]
 
@@ -112,6 +126,9 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         effective_far=effective_far,
         far_calc_basis=far_calc_basis,
         market_price_per_tsubo=market_price_per_tsubo,
+        condo_market_price_per_tsubo=condo_market_price,
+        sales_price_per_tsubo=sales_price_per_tsubo,
+        land_exit_total=land_exit_total,
         purchase_price=purchase_price,
         purchase_price_per_tsubo=purchase_price_per_tsubo,
         profit_total=profit_total,
