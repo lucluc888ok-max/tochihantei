@@ -74,7 +74,7 @@ export default function App() {
       payload.assembly_cost = acNum;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90000);
+    const timer = setTimeout(() => controller.abort(), 120000);
     let res: Response;
     try {
       res = await fetch(`${BASE_URL}/api/simulate`, {
@@ -243,7 +243,10 @@ export default function App() {
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
-      alert(`シミュレーションに失敗しました。\n\nサーバーが起動しているか確認してください。\n詳細: ${msg}`);
+      const isTimeout = msg.includes('abort') || msg.includes('timeout');
+      alert(isTimeout
+        ? `サーバーが起動中です。\n\n初回アクセス時は60〜90秒かかる場合があります。\nしばらく待ってから再度「シミュレーション実行」を押してください。`
+        : `シミュレーションに失敗しました。\n\n詳細: ${msg}`);
     } finally {
       setIsSimulating(false);
     }
