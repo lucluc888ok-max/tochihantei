@@ -1,4 +1,5 @@
 import math
+import os
 from app.models.simulator_models import SimulatorRequest, SimulatorResponse, CostDetail
 from app.services.external_api.mlit_api import fetch_mlit_transaction_data, fetch_condo_market_price
 
@@ -6,6 +7,55 @@ from app.services.external_api.mlit_api import fetch_mlit_transaction_data, fetc
 TSUBO_SQM_RATIO = 3.305785
 DEFAULT_CONSTRUCTION_COST_PER_TSUBO = 1600000.0  # RC造: 160万円/坪
 RENTABLE_RATIO = 0.82 # レンタブル比
+
+# エリア別新築プレミアム乗数のキャッシュ
+_premium_cache: dict = {}
+
+def _get_new_construction_premium(address: str, condo_price: float) -> float:
+    """Geminiを使ってエリアの新築プレミアム乗数を推定する。APIキーなければ1.5固定。"""
+    if address in _premium_cache:
+        return _premium_cache[address]
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return 1.5
+
+    try:
+        from google import genai
+        from google.genai import types
+        from pydantic import BaseModel
+
+        class PremiumSchema(BaseModel):
+            multiplier: float
+            reason: str
+
+        client = genai.Client(api_key=api_key)
+        prompt = f"""
+あなたは東京の不動産市場に精通した専門家です。
+以下の物件について、中古マンション相場に対する新築分譲マンションの価格プレミアム乗数を推定してください。
+
+物件所在地: {address}
+中古マンション相場: {condo_price/10000:.0f}万円/坪
+
+エリアの新築マンション市場の需給・ブランド力・利便性を考慮し、
+中古相場に掛ける乗数（例: 1.4〜2.0）を返してください。
+"""
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=PremiumSchema
+            )
+        )
+        result = PremiumSchema.model_validate_json(response.text)
+        multiplier = max(1.2, min(2.5, result.multiplier))  # 1.2〜2.5の範囲でクランプ
+        print(f"[premium] {address} → ×{multiplier:.2f}（{result.reason[:30]}）")
+        _premium_cache[address] = multiplier
+        return multiplier
+    except Exception as e:
+        print(f"[premium] Gemini失敗、1.5を使用: {e}")
+        return 1.5
 
 def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 1. 実行容積率の計算
@@ -30,11 +80,13 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     land_area_tsubo = req.area_sqm / TSUBO_SQM_RATIO
 
     # 【出口価格】
-    # 中古マンション相場 × 1.4（新築プレミアム）。データなければ宅地相場 × 1.2 でフォールバック
+    # 中古マンション相場 × Gemini推定乗数（新築プレミアム）。データなければ宅地相場 × 1.2 でフォールバック
     if condo_market_price > 0:
-        sales_price_per_tsubo = condo_market_price * 1.4
+        premium_multiplier = _get_new_construction_premium(req.address, condo_market_price)
+        sales_price_per_tsubo = condo_market_price * premium_multiplier
     else:
-        sales_price_per_tsubo = market_price_per_tsubo * 1.2
+        premium_multiplier = 1.2
+        sales_price_per_tsubo = market_price_per_tsubo * premium_multiplier
 
     total_sales = net_area_tsubo * sales_price_per_tsubo
 
