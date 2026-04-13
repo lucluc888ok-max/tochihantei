@@ -187,26 +187,40 @@ export default function App() {
     return { address, area_sqm, land_use_zone, coverage_ratio, floor_area_ratio, road_width_m, purchase_price_hint } as any;
   };
 
-  const handleParseText = () => {
+  const handleParseText = async () => {
     if (!mailText.trim()) return;
-    const extracted = parseTextLocally(mailText);
-
-    // フィールドに反映
-    const dummy: ParsedData = {
-      address: extracted.address ?? '',
-      area_sqm: extracted.area_sqm ?? 0,
-      land_use_zone: extracted.land_use_zone ?? '',
-      coverage_ratio: (extracted as any).coverage_ratio ?? 0,
-      floor_area_ratio: extracted.floor_area_ratio ?? 0,
-      road_width_m: (extracted as any).road_width_m ?? 0,
-      is_leasehold: false,
-      leasehold_ratio: 100,
-      road_type: '',
-      setback_area_estimated: 0,
-      market_price_per_tsubo: 0,
-      purchase_price_hint: (extracted as any).purchase_price_hint ?? 0,
-    } as any;
-    applyParsedData(dummy);
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/parse-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: mailText }),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const parsed: ParsedData = (await res.json()).data;
+      applyParsedData(parsed);
+    } catch (err) {
+      // バックエンド失敗時はフロント正規表現にフォールバック
+      console.warn('バックエンド解析失敗、ローカル解析を使用:', err);
+      const extracted = parseTextLocally(mailText);
+      const dummy: ParsedData = {
+        address: extracted.address ?? '',
+        area_sqm: extracted.area_sqm ?? 0,
+        land_use_zone: extracted.land_use_zone ?? '',
+        coverage_ratio: (extracted as any).coverage_ratio ?? 0,
+        floor_area_ratio: extracted.floor_area_ratio ?? 0,
+        road_width_m: (extracted as any).road_width_m ?? 0,
+        is_leasehold: false,
+        leasehold_ratio: 100,
+        road_type: '',
+        setback_area_estimated: 0,
+        market_price_per_tsubo: 0,
+        purchase_price_hint: (extracted as any).purchase_price_hint ?? 0,
+      } as any;
+      applyParsedData(dummy);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,10 +322,17 @@ export default function App() {
             />
             <button
               onClick={handleParseText}
-              disabled={!mailText.trim()}
+              disabled={!mailText.trim() || isAnalyzing}
               className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2"
             >
-              <Mail className="w-4 h-4" />入力欄に反映する
+              {isAnalyzing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  AI解析中...
+                </>
+              ) : (
+                <><Mail className="w-4 h-4" />入力欄に反映する</>
+              )}
             </button>
           </div>
 

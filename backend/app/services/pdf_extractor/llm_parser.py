@@ -89,9 +89,29 @@ def extract_property_data_with_llm(pdf_bytes: bytes) -> PropertyDataSchema:
 
 def extract_property_data_from_text(text: str) -> PropertyDataSchema:
     """
-    メール・テキストから物件情報を正規表現で高速抽出する。
-    LLM不使用のため即時返却。
+    メール・テキストからGemini Flashで物件情報を抽出する。
+    APIキー未設定時は正規表現でフォールバック。
     """
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if api_key:
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[_EXTRACT_PROMPT, text],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=PropertyDataSchema
+                )
+            )
+            result = PropertyDataSchema.model_validate_json(response.text)
+            print(f"[Text Parser] Gemini抽出: 住所={result.address}, 面積={result.area_sqm}㎡, 容積率={result.floor_area_ratio}%")
+            return result
+        except Exception as e:
+            print(f"[Text Parser] Gemini失敗、正規表現にフォールバック: {e}")
+
+    # フォールバック：正規表現
     import re
 
     def find_float(patterns: list[str]) -> float:
@@ -104,76 +124,24 @@ def extract_property_data_from_text(text: str) -> PropertyDataSchema:
                     pass
         return 0.0
 
-    def find_str(patterns: list[str]) -> str:
-        for pat in patterns:
-            m = re.search(pat, text)
-            if m:
-                return m.group(1).strip()
-        return ""
-
-    # 住所
-    address = find_str([
-        r'(?:所在地|住所|物件住所)[：:\s]+([東京都].+?)\n',
-        r'(東京都[\u4e00-\u9fa5\w\d\-]+[丁目番地\-\d]+)',
-    ])
-
-    # 面積（㎡優先、坪→㎡換算）
+    address_m = re.search(r'東京都[\u4e00-\u9fa5\w\d\-ー]+[丁目番地号\-\d]+', text)
+    address = address_m.group(0).strip() if address_m else ""
     area_sqm = find_float([r'([\d,\.]+)\s*㎡'])
     if area_sqm == 0.0:
         tsubo = find_float([r'([\d,\.]+)\s*坪'])
         if tsubo > 0:
             area_sqm = round(tsubo * 3.305785, 2)
-
-    # 容積率
-    floor_area_ratio = find_float([
-        r'容積率\s*[：:]?\s*([\d]+)',
-        r'容積\s*([\d]+)',
-    ])
-
-    # 用途地域
-    ZONE_NAMES = [
-        "第一種低層住居専用地域", "第二種低層住居専用地域",
-        "第一種中高層住居専用地域", "第二種中高層住居専用地域",
-        "第一種住居地域", "第二種住居地域", "準住居地域",
-        "近隣商業地域", "商業地域", "準工業地域", "工業地域", "工業専用地域",
-        "田園住居地域",
-        # 略称
-        "1低", "2低", "1中高", "2中高", "準工", "近商",
-    ]
-    land_use_zone = ""
-    for zone in ZONE_NAMES:
-        if zone in text:
-            land_use_zone = zone
-            break
-
-    # 道路幅員
-    road_width_m = find_float([
-        r'幅員\s*([\d\.]+)\s*m',
-        r'道路幅員\s*[：:]?\s*([\d\.]+)',
-        r'([\d\.]+)\s*m.*?道路',
-    ])
-
-    # 仕入目線（億・万円）
+    floor_area_ratio = find_float([r'容積率\s*[：:]?\s*([\d]+)', r'容積\s*([\d]+)'])
     purchase_price_hint = 0.0
     m_oku = re.search(r'(?:目線|売価|価格|希望)[：:\s]*([\d\.]+)\s*億', text)
-    m_man = re.search(r'(?:目線|売価|価格|希望)[：:\s]*([\d,]+)\s*万', text)
     if m_oku:
         purchase_price_hint = float(m_oku.group(1)) * 1_0000_0000
-    elif m_man:
-        purchase_price_hint = float(m_man.group(1).replace(",", "")) * 10000
 
-    print(f"[Text Parser] 住所={address}, 面積={area_sqm}㎡, 容積率={floor_area_ratio}%, 道路={road_width_m}m, 目線={purchase_price_hint/10000:.0f}万円")
-
+    print(f"[Text Parser] 正規表現: 住所={address}, 面積={area_sqm}㎡")
     return PropertyDataSchema(
-        address=address,
-        area_sqm=area_sqm,
-        land_use_zone=land_use_zone,
-        floor_area_ratio=floor_area_ratio,
-        road_width_m=road_width_m,
-        is_leasehold=False,
-        leasehold_ratio=100.0,
-        road_type="",
-        setback_area_estimated=0.0,
-        purchase_price_hint=purchase_price_hint,
+        address=address, area_sqm=area_sqm, land_use_zone="",
+        floor_area_ratio=floor_area_ratio, road_width_m=0.0,
+        is_leasehold=False, leasehold_ratio=100.0, road_type="",
+        setback_area_estimated=0.0, purchase_price_hint=purchase_price_hint,
         market_price_per_tsubo=0.0
     )
