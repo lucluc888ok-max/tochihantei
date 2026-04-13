@@ -14,7 +14,7 @@
 - Backend: https://tochihantei-production.up.railway.app
 - GitHub: https://github.com/lucluc888ok-max/tochihantei
 
-## git push で両方自動デプロイされる
+git push で両方自動デプロイされる。
 
 ## 環境変数
 ### Backend (Railway)
@@ -23,7 +23,7 @@
 ### Frontend (Vercel)
 - `VITE_API_BASE_URL`: バックエンドURL（https://tochihantei-production.up.railway.app）
 
-### ローカル開発
+### ローカル・Codespaces開発
 - `backend/.env`: GEMINI_API_KEY=xxx
 - `frontend/.env.local`: VITE_API_BASE_URL=http://localhost:8000
 
@@ -36,15 +36,26 @@ land-purchase-simulator/
 │   │   ├── models/simulator_models.py        # Pydanticモデル
 │   │   ├── api/endpoints/simulator.py        # シミュレーションエンドポイント
 │   │   └── services/
-│   │       ├── calculator/simulator_logic.py # メイン計算ロジック
+│   │       ├── calculator/simulator_logic.py # メイン計算ロジック ★よく触る
 │   │       ├── external_api/mlit_api.py      # 国土交通省データ取得
 │   │       └── pdf_extractor/llm_parser.py   # PDF・テキスト解析
 │   ├── data/cities/                          # 49市区JSON（国交省取引データ）
 │   ├── requirements.txt
 │   └── railway.toml
 └── frontend/
-    └── src/App.tsx                           # メインUI
+    └── src/App.tsx                           # メインUI ★よく触る
 ```
+
+## よく変更するパラメータ（simulator_logic.py）
+
+| パラメータ | 場所 | 現在値 |
+|-----------|------|--------|
+| 建築費単価 | `DEFAULT_CONSTRUCTION_COST_PER_TSUBO` | 160万円/坪（RC造） |
+| レンタブル比 | `RENTABLE_RATIO` | 0.82 |
+| 宅地相場補正 | `fetch_mlit_transaction_data(...) * 1.1` | ×1.1 |
+| 区別プレミアム乗数 | `_AREA_PREMIUM_TABLE` | 港区2.1〜練馬1.4 |
+| 用途地域補正 | `_ZONE_CORRECTION` | 準工業0.85・低層1.10 |
+| 諸経費率 | `cost_base * 0.10` | 10% |
 
 ## 主要ロジック（simulator_logic.py）
 
@@ -88,13 +99,15 @@ RC造: 160万円/坪（DEFAULT_CONSTRUCTION_COST_PER_TSUBO）
 ## データソース
 - 国土交通省 不動産情報ライブラリ: 213,304件の取引データをローカルJSONに変換済み
 - `backend/data/cities/13101.json`〜`13229.json`（49ファイル）
+- **注意**: Git LFS無効。大容量JSONは直接コミット済み（LFS使用不可）
 
 ## ローカル起動
 ```bash
 # バックエンド
 cd backend
 python -m venv venv
-venv\Scripts\activate
+source venv/bin/activate    # Mac / Linux / Codespaces
+venv\Scripts\activate       # Windows
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
@@ -109,3 +122,12 @@ npm run dev
 - `POST /api/parse-pdf`: PDFから物件情報抽出
 - `POST /api/parse-text`: テキストから物件情報抽出
 - `POST /api/simulate`: シミュレーション実行
+
+## 既知の注意点
+- **Railway cold start**: デプロイ後・アイドル後の初回リクエストは30〜60秒かかることがある
+- **Git LFS無効**: `data/cities/` の大容量JSONはLFS管理外。`git push`で直接コミット
+- **CORS設定**: `allow_credentials=False` + `allow_origins=["*"]`。credentialsをTrueにするとCORSエラーになる
+
+## 今後の課題・検討事項
+- 区単位より細かいエリア補正（駅距離・路線別）の精度向上
+- 乗数テーブルの管理画面化（コード変更なしで調整できるように）
