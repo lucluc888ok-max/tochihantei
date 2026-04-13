@@ -22,29 +22,36 @@ CITY_CODES = {
 
 API_KEY = "0d93881d4cfe4cc0bd5569f9e5e174f7"
 
-LOCAL_DATA_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../../data/tokyo_transactions.json")
+CITIES_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../../data/cities")
 )
 
-# 起動後初回のみJSONを読み込んでメモリにキャッシュ
-_data_cache: Optional[Dict] = None
+# 都市コードごとにキャッシュ
+_city_cache: Dict = {}
 
 
 def _load_local_data() -> Dict:
-    global _data_cache
-    if _data_cache is None:
-        if os.path.exists(LOCAL_DATA_PATH):
-            try:
-                with open(LOCAL_DATA_PATH, "r", encoding="utf-8") as f:
-                    _data_cache = json.load(f)
-                print(f"[mlit_api] ローカルデータを読み込みました: {len(_data_cache)}市区町村")
-            except Exception as e:
-                print(f"[mlit_api] ローカルデータの読み込みに失敗（Git LFSポインタの可能性）: {e}")
-                _data_cache = {}
-        else:
-            print(f"[mlit_api] ローカルデータが見つかりません: {LOCAL_DATA_PATH}")
-            _data_cache = {}
-    return _data_cache
+    """後方互換用：全都市データをまとめて返す（非推奨）"""
+    return _city_cache
+
+
+def _load_city(city_code: str) -> List[dict]:
+    """指定都市コードのデータをキャッシュ付きで返す"""
+    if city_code in _city_cache:
+        return _city_cache[city_code]
+    path = os.path.join(CITIES_DIR, f"{city_code}.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _city_cache[city_code] = data
+            print(f"[mlit_api] 読み込み: {city_code} ({len(data)}件)")
+            return data
+        except Exception as e:
+            print(f"[mlit_api] 読み込みエラー {city_code}: {e}")
+    else:
+        print(f"[mlit_api] データなし: {city_code}")
+    return []
 
 
 def get_city_code_from_address(address: str) -> str:
@@ -57,19 +64,15 @@ def get_city_code_from_address(address: str) -> str:
 def fetch_mlit_transaction_data(address: str, target_far: float) -> float:
     """
     住所と容積率をもとに、周辺の平均坪単価を返す。
-    ローカルJSONを優先し、なければAPIから取得する。
     """
     city_code = get_city_code_from_address(address)
-
-    local_data = _load_local_data()
-    if city_code in local_data:
-        result = _calc_avg_tsubo_price(local_data[city_code], target_far)
+    records = _load_city(city_code)
+    if records:
+        result = _calc_avg_tsubo_price(records, target_far)
         if result > 0:
-            print(f"[mlit_api] ローカルデータ使用: {address} (コード:{city_code}) → {result:,.0f}円/坪")
+            print(f"[mlit_api] 宅地相場: {address} → {result:,.0f}円/坪")
             return result
-
-    # ローカルデータがない or 0件の場合はフォールバック値を返す（APIは呼ばない）
-    print(f"[mlit_api] ローカルデータなし。フォールバック値を使用: {address} (コード:{city_code})")
+    print(f"[mlit_api] データなし。フォールバック値を使用: {address}")
     return 1_500_000.0
 
 
@@ -122,9 +125,9 @@ def fetch_condo_market_price(address: str) -> float:
     新築分譲の出口価格算出に使用（× 1.4 で新築プレミアムを加算）。
     """
     city_code = get_city_code_from_address(address)
-    local_data = _load_local_data()
-    if city_code in local_data:
-        result = _calc_condo_avg_tsubo_price(local_data[city_code])
+    records = _load_city(city_code)
+    if records:
+        result = _calc_condo_avg_tsubo_price(records)
         if result > 0:
             return result
     return 0.0

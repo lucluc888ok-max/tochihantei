@@ -1,1 +1,1 @@
-backend/data/tokyo_transactions.json filter=lfs diff=lfs merge=lfs -text
+# LFS解除済み（都市別ファイルに分割したため不要）
