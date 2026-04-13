@@ -34,9 +34,13 @@ def _load_local_data() -> Dict:
     global _data_cache
     if _data_cache is None:
         if os.path.exists(LOCAL_DATA_PATH):
-            with open(LOCAL_DATA_PATH, "r", encoding="utf-8") as f:
-                _data_cache = json.load(f)
-            print(f"[mlit_api] ローカルデータを読み込みました: {len(_data_cache)}市区町村")
+            try:
+                with open(LOCAL_DATA_PATH, "r", encoding="utf-8") as f:
+                    _data_cache = json.load(f)
+                print(f"[mlit_api] ローカルデータを読み込みました: {len(_data_cache)}市区町村")
+            except Exception as e:
+                print(f"[mlit_api] ローカルデータの読み込みに失敗（Git LFSポインタの可能性）: {e}")
+                _data_cache = {}
         else:
             print(f"[mlit_api] ローカルデータが見つかりません: {LOCAL_DATA_PATH}")
             _data_cache = {}
