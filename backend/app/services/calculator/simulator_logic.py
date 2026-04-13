@@ -131,7 +131,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     far_calc_basis = f"前面道路幅員({req.road_width}m) × {'0.4' if is_residential else '0.6'} × 100 = {calculated_far:.1f}% と指定容積率({req.far_limit}%)の低い方を採用"
 
     # 2. 相場取得
-    market_price_per_tsubo = fetch_mlit_transaction_data(req.address, effective_far)  # 宅地相場
+    market_price_per_tsubo = fetch_mlit_transaction_data(req.address, effective_far) * 1.1  # 宅地相場（×1.1補正）
     condo_market_price = fetch_condo_market_price(req.address)                         # 中古マンション相場
 
     # 3. 面積計算
