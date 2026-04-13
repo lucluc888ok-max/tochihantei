@@ -29,5 +29,6 @@ class SimulatorResponse(BaseModel):
     max_floor_area_sqm: float
     net_area_sqm: float
     net_area_tsubo: float
+    premium_multiplier: float = 1.4
     report_data: Dict[str, List[CostDetail]]
     report_text: Optional[str] = ""

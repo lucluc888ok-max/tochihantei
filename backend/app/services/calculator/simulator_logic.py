@@ -221,6 +221,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         max_floor_area_sqm=max_floor_area_sqm,
         net_area_sqm=net_area_sqm,
         net_area_tsubo=net_area_tsubo,
+        premium_multiplier=premium_multiplier,
         report_data=report_data,
         report_text=""
     )

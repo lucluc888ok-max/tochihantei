@@ -42,6 +42,7 @@ interface SimResult {
   max_floor_area_sqm: number;
   net_area_sqm: number;
   net_area_tsubo: number;
+  premium_multiplier: number;
   report_data: { expenses: CostDetail[]; revenues: CostDetail[] };
 }
 
@@ -574,7 +575,7 @@ export default function App() {
               <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                 <span>宅地相場: <span className="text-gray-300 font-mono">{(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 <span>中古マンション相場: <span className="text-gray-300 font-mono">{(simResult.condo_market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
-                <span>出口坪単価: <span className="text-blue-300 font-mono">{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>（×{simResult.condo_market_price_per_tsubo > 0 ? (simResult.sales_price_per_tsubo / simResult.condo_market_price_per_tsubo).toFixed(2) : '1.20'}・AI推定）</span>
+                <span>出口坪単価: <span className="text-blue-300 font-mono">{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>（×{simResult.premium_multiplier.toFixed(1)}・エリア推定）</span>
                 {simResult.purchase_price_per_tsubo != null && (
                   <span>提示仕入坪単価: <span className="text-yellow-300 font-mono">{(simResult.purchase_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 )}
