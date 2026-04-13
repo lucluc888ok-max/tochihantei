@@ -25,6 +25,13 @@ def _enrich_with_market_price(result):
     return result
 
 
+@app.get("/api/health")
+async def health():
+    import os
+    key = os.environ.get("GEMINI_API_KEY")
+    return {"gemini_key_set": bool(key), "key_length": len(key) if key else 0}
+
+
 @app.post("/api/parse-pdf")
 async def parse_pdf_endpoint(file: UploadFile = File(...)):
     """PDFをGeminiで解析し、物件情報＋相場データを返す"""
