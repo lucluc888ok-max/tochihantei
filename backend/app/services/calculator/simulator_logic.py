@@ -13,8 +13,9 @@ _premium_cache: dict = {}
 
 def _get_new_construction_premium(address: str, condo_price: float) -> float:
     """Geminiを使ってエリアの新築プレミアム乗数を推定する。APIキーなければ1.5固定。"""
-    if address in _premium_cache:
-        return _premium_cache[address]
+    cache_key = f"v2:{address}"
+    if cache_key in _premium_cache:
+        return _premium_cache[cache_key]
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -31,14 +32,21 @@ def _get_new_construction_premium(address: str, condo_price: float) -> float:
 
         client = genai.Client(api_key=api_key)
         prompt = f"""
-あなたは東京の不動産市場に精通した専門家です。
+あなたは東京の新築分譲マンション市場に精通した不動産鑑定士です。
 以下の物件について、中古マンション相場に対する新築分譲マンションの価格プレミアム乗数を推定してください。
 
 物件所在地: {address}
 中古マンション相場: {condo_price/10000:.0f}万円/坪
 
-エリアの新築マンション市場の需給・ブランド力・利便性を考慮し、
-中古相場に掛ける乗数（例: 1.4〜2.0）を返してください。
+【参考レンジ】
+- 都心一等地（港区・千代田区・渋谷区）: 1.8〜2.2倍
+- 準都心人気エリア（豊島区池袋・新宿・目黒・文京区）: 1.6〜1.9倍
+- 城南・城西（世田谷・杉並・品川）: 1.5〜1.7倍
+- その他23区: 1.3〜1.5倍
+- 多摩地区: 1.2〜1.4倍
+
+新築プレミアムは「立地ブランド・利便性・供給希少性・デベロッパーの販売力」を総合的に判断してください。
+中古相場に掛ける乗数を小数点第1位で返してください。
 """
         response = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -51,7 +59,7 @@ def _get_new_construction_premium(address: str, condo_price: float) -> float:
         result = PremiumSchema.model_validate_json(response.text)
         multiplier = max(1.2, min(2.5, result.multiplier))  # 1.2〜2.5の範囲でクランプ
         print(f"[premium] {address} → ×{multiplier:.2f}（{result.reason[:30]}）")
-        _premium_cache[address] = multiplier
+        _premium_cache[cache_key] = multiplier
         return multiplier
     except Exception as e:
         print(f"[premium] Gemini失敗、1.5を使用: {e}")
