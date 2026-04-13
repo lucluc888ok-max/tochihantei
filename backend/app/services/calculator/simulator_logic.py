@@ -8,18 +8,54 @@ TSUBO_SQM_RATIO = 3.305785
 DEFAULT_CONSTRUCTION_COST_PER_TSUBO = 1600000.0  # RC造: 160万円/坪
 RENTABLE_RATIO = 0.82 # レンタブル比
 
-# エリア別新築プレミアム乗数のキャッシュ
+# エリア別新築プレミアム乗数テーブル（市区コード → 乗数）
+_AREA_PREMIUM_TABLE = {
+    "13101": 2.0,  # 千代田区
+    "13102": 1.9,  # 中央区
+    "13103": 2.1,  # 港区
+    "13104": 1.8,  # 新宿区
+    "13105": 1.8,  # 文京区
+    "13106": 1.6,  # 台東区
+    "13107": 1.5,  # 墨田区
+    "13108": 1.5,  # 江東区
+    "13109": 1.7,  # 品川区
+    "13110": 1.8,  # 目黒区
+    "13111": 1.6,  # 大田区
+    "13112": 1.7,  # 世田谷区
+    "13113": 2.0,  # 渋谷区
+    "13114": 1.6,  # 中野区
+    "13115": 1.6,  # 杉並区
+    "13116": 1.7,  # 豊島区（池袋）
+    "13117": 1.5,  # 北区
+    "13118": 1.5,  # 荒川区
+    "13119": 1.5,  # 板橋区
+    "13120": 1.4,  # 練馬区
+    "13121": 1.4,  # 足立区
+    "13122": 1.4,  # 葛飾区
+    "13123": 1.4,  # 江戸川区
+}
+
+# 多摩地区Gemini補完キャッシュ
 _premium_cache: dict = {}
 
 def _get_new_construction_premium(address: str, condo_price: float) -> float:
-    """Geminiを使ってエリアの新築プレミアム乗数を推定する。APIキーなければ1.5固定。"""
-    cache_key = f"v2:{address}"
+    """市区テーブルから乗数を返す。未収録エリア（多摩地区等）はGeminiで補完。"""
+    from app.services.external_api.mlit_api import get_city_code_from_address
+    city_code = get_city_code_from_address(address)
+
+    if city_code in _AREA_PREMIUM_TABLE:
+        multiplier = _AREA_PREMIUM_TABLE[city_code]
+        print(f"[premium] {address} → ×{multiplier}（テーブル参照・{city_code}）")
+        return multiplier
+
+    # 多摩地区などはGeminiで補完
+    cache_key = f"v3:{address}"
     if cache_key in _premium_cache:
         return _premium_cache[cache_key]
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return 1.5
+        return 1.4
 
     try:
         from google import genai
@@ -32,21 +68,14 @@ def _get_new_construction_premium(address: str, condo_price: float) -> float:
 
         client = genai.Client(api_key=api_key)
         prompt = f"""
-あなたは東京の新築分譲マンション市場に精通した不動産鑑定士です。
-以下の物件について、中古マンション相場に対する新築分譲マンションの価格プレミアム乗数を推定してください。
+東京多摩地区の新築マンション市場専門家として、
+中古マンション相場に対する新築プレミアム乗数を推定してください。
 
 物件所在地: {address}
 中古マンション相場: {condo_price/10000:.0f}万円/坪
+参考レンジ: 1.2〜1.5倍
 
-【参考レンジ】
-- 都心一等地（港区・千代田区・渋谷区）: 1.8〜2.2倍
-- 準都心人気エリア（豊島区池袋・新宿・目黒・文京区）: 1.6〜1.9倍
-- 城南・城西（世田谷・杉並・品川）: 1.5〜1.7倍
-- その他23区: 1.3〜1.5倍
-- 多摩地区: 1.2〜1.4倍
-
-新築プレミアムは「立地ブランド・利便性・供給希少性・デベロッパーの販売力」を総合的に判断してください。
-中古相場に掛ける乗数を小数点第1位で返してください。
+乗数を小数点第1位で返してください。
 """
         response = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -57,13 +86,13 @@ def _get_new_construction_premium(address: str, condo_price: float) -> float:
             )
         )
         result = PremiumSchema.model_validate_json(response.text)
-        multiplier = max(1.2, min(2.5, result.multiplier))  # 1.2〜2.5の範囲でクランプ
-        print(f"[premium] {address} → ×{multiplier:.2f}（{result.reason[:30]}）")
+        multiplier = max(1.2, min(1.6, result.multiplier))
+        print(f"[premium] {address} → ×{multiplier:.1f}（Gemini補完）")
         _premium_cache[cache_key] = multiplier
         return multiplier
     except Exception as e:
-        print(f"[premium] Gemini失敗、1.5を使用: {e}")
-        return 1.5
+        print(f"[premium] Gemini失敗、1.4を使用: {e}")
+        return 1.4
 
 def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 1. 実行容積率の計算
