@@ -8,6 +8,29 @@ TSUBO_SQM_RATIO = 3.305785
 DEFAULT_CONSTRUCTION_COST_PER_TSUBO = 1600000.0  # RC造: 160万円/坪
 RENTABLE_RATIO = 0.82 # レンタブル比
 
+# 用途地域別補正係数
+_ZONE_CORRECTION = {
+    "第一種低層住居専用地域": 1.10,
+    "第二種低層住居専用地域": 1.10,
+    "第一種中高層住居専用地域": 1.05,
+    "第二種中高層住居専用地域": 1.05,
+    "第一種住居地域": 1.05,
+    "第二種住居地域": 1.05,
+    "準住居地域": 1.00,
+    "近隣商業地域": 1.00,
+    "商業地域": 1.00,
+    "準工業地域": 0.85,
+    "工業地域": 0.75,
+    "工業専用地域": 0.75,
+    "田園住居地域": 1.10,
+}
+
+def _get_zone_correction(zoning: str) -> float:
+    for zone, factor in _ZONE_CORRECTION.items():
+        if zone in zoning:
+            return factor
+    return 1.00
+
 # エリア別新築プレミアム乗数テーブル（市区コード → 乗数）
 _AREA_PREMIUM_TABLE = {
     "13101": 2.0,  # 千代田区
@@ -38,14 +61,16 @@ _AREA_PREMIUM_TABLE = {
 # 多摩地区Gemini補完キャッシュ
 _premium_cache: dict = {}
 
-def _get_new_construction_premium(address: str, condo_price: float) -> float:
-    """市区テーブルから乗数を返す。未収録エリア（多摩地区等）はGeminiで補完。"""
+def _get_new_construction_premium(address: str, condo_price: float, zoning: str = "") -> float:
+    """市区テーブル × 用途地域補正で乗数を返す。未収録エリアはGeminiで補完。"""
     from app.services.external_api.mlit_api import get_city_code_from_address
     city_code = get_city_code_from_address(address)
+    zone_factor = _get_zone_correction(zoning)
 
     if city_code in _AREA_PREMIUM_TABLE:
-        multiplier = _AREA_PREMIUM_TABLE[city_code]
-        print(f"[premium] {address} → ×{multiplier}（テーブル参照・{city_code}）")
+        base = _AREA_PREMIUM_TABLE[city_code]
+        multiplier = round(base * zone_factor, 2)
+        print(f"[premium] {address}({zoning}) → 区基準×{base} × 用途補正×{zone_factor} = ×{multiplier}")
         return multiplier
 
     # 多摩地区などはGeminiで補完
@@ -119,7 +144,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 【出口価格】
     # 中古マンション相場 × Gemini推定乗数（新築プレミアム）。データなければ宅地相場 × 1.2 でフォールバック
     if condo_market_price > 0:
-        premium_multiplier = _get_new_construction_premium(req.address, condo_market_price)
+        premium_multiplier = _get_new_construction_premium(req.address, condo_market_price, req.zoning)
         sales_price_per_tsubo = condo_market_price * premium_multiplier
     else:
         premium_multiplier = 1.2
