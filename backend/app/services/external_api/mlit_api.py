@@ -162,36 +162,46 @@ def _calc_condo_avg_tsubo_price(transactions: List[dict]) -> float:
     return total / count if count > 0 else 0.0
 
 
+# 2024年地価公示 住宅地 区平均（円/㎡）
+# 出典: 国土交通省 地価公示（2024年）
+# 更新: 毎年4月公表後に手動更新
+_POSTED_LAND_PRICE_TABLE: Dict[str, float] = {
+    "13101": 1_460_000,  # 千代田区
+    "13102": 1_210_000,  # 中央区
+    "13103": 1_540_000,  # 港区
+    "13104":   830_000,  # 新宿区
+    "13105":   870_000,  # 文京区
+    "13106":   660_000,  # 台東区
+    "13107":   500_000,  # 墨田区
+    "13108":   530_000,  # 江東区
+    "13109":   700_000,  # 品川区
+    "13110":   860_000,  # 目黒区
+    "13111":   540_000,  # 大田区
+    "13112":   630_000,  # 世田谷区
+    "13113": 1_160_000,  # 渋谷区
+    "13114":   620_000,  # 中野区
+    "13115":   560_000,  # 杉並区
+    "13116":   670_000,  # 豊島区
+    "13117":   500_000,  # 北区
+    "13118":   480_000,  # 荒川区
+    "13119":   430_000,  # 板橋区
+    "13120":   400_000,  # 練馬区
+    "13121":   380_000,  # 足立区
+    "13122":   360_000,  # 葛飾区
+    "13123":   370_000,  # 江戸川区
+}
+
+
 def fetch_posted_land_price(address: str) -> Optional[float]:
     """
-    公示地価（地価公示）の平均価格（円/㎡）を返す。
-    REINFOLIB XKT001 エンドポイントを使用。
+    公示地価（地価公示）の区平均価格（円/㎡）を返す。
+    2024年地価公示 住宅地区平均テーブルを使用。毎年4月に手動更新。
     """
     city_code = get_city_code_from_address(address)
-    pref_code = city_code[:2]  # 都道府県コード（東京=13）
-    headers = {"Ocp-Apim-Subscription-Key": API_KEY}
-    url = f"https://www.reinfolib.mlit.go.jp/ex-api/external/XKT001?area={pref_code}&city={city_code}&preferType=01"
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code != 200:
-            print(f"[mlit_api] 公示地価APIエラー: {resp.status_code}")
-            return None
-        data = resp.json().get("data", [])
-        prices = []
-        for item in data:
-            try:
-                price = float(item.get("CurPrice") or 0)
-                if price > 0:
-                    prices.append(price)
-            except (ValueError, TypeError):
-                continue
-        if prices:
-            avg = sum(prices) / len(prices)
-            print(f"[mlit_api] 公示地価: {address} → {avg:,.0f}円/㎡（{len(prices)}地点平均）")
-            return avg
-    except Exception as e:
-        print(f"[mlit_api] 公示地価取得エラー: {e}")
-    return None
+    price = _POSTED_LAND_PRICE_TABLE.get(city_code)
+    if price:
+        print(f"[mlit_api] 公示地価: {address}（{city_code}）→ {price:,.0f}円/㎡（2024年区平均）")
+    return price
 
 
 def _fetch_from_api(city_code: str, target_far: float) -> float:

@@ -725,7 +725,7 @@ export default function App() {
               {/* 相場メモ */}
               <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                 {simResult.posted_land_price_per_sqm != null && (
-                  <span>公示地価: <span className="text-emerald-300 font-mono">{Math.round(simResult.posted_land_price_per_sqm / 10000)}万円/㎡</span>（{Math.round(simResult.posted_land_price_per_sqm * 3.305785 / 10000)}万円/坪）</span>
+                  <span>公示地価: <span className="text-emerald-300 font-mono">{Math.round(simResult.posted_land_price_per_sqm / 10000)}万円/㎡</span>（{Math.round(simResult.posted_land_price_per_sqm * 3.305785 / 10000)}万円/坪）<span className="text-gray-600">2024年区平均</span></span>
                 )}
                 <span>宅地相場: <span className="text-gray-300 font-mono">{(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 <span>中古マンション相場: <span className="text-gray-300 font-mono">{(simResult.condo_market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
