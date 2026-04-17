@@ -1,7 +1,7 @@
 import math
 import os
 from app.models.simulator_models import SimulatorRequest, SimulatorResponse, CostDetail
-from app.services.external_api.mlit_api import fetch_mlit_transaction_data, fetch_condo_market_price
+from app.services.external_api.mlit_api import fetch_mlit_transaction_data, fetch_condo_market_price, fetch_posted_land_price
 
 # 定数
 TSUBO_SQM_RATIO = 3.305785
@@ -133,6 +133,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 2. 相場取得
     market_price_per_tsubo = fetch_mlit_transaction_data(req.address, effective_far) * 1.1  # 宅地相場（×1.1補正）
     condo_market_price = fetch_condo_market_price(req.address)                         # 中古マンション相場
+    posted_land_price_per_sqm = fetch_posted_land_price(req.address)                  # 公示地価（円/㎡）
 
     # 3. 面積計算
     max_floor_area_sqm = req.area_sqm * (effective_far / 100.0)
@@ -174,6 +175,12 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     else:
         profit_total = None
         profit_margin = None
+
+    # 3.5 道路斜線制限（概算）
+    road_setline_slope = 1.25 if is_residential else 1.5
+    road_setline_max_height_0m = round(req.road_width * road_setline_slope, 1)
+    road_setline_max_height_5m = round((req.road_width + 5) * road_setline_slope, 1)
+    road_setline_note = f"{'住居系（勾配1:1.25）' if is_residential else '商業・工業系（勾配1:1.5）'}"
 
     # 4. レポート表の組み立て
     expenses_list = []
@@ -248,7 +255,12 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         net_area_tsubo=net_area_tsubo,
         premium_multiplier=premium_multiplier,
         report_data=report_data,
-        report_text=""
+        report_text="",
+        road_setline_slope=road_setline_slope,
+        road_setline_max_height_0m=road_setline_max_height_0m,
+        road_setline_max_height_5m=road_setline_max_height_5m,
+        road_setline_note=road_setline_note,
+        posted_land_price_per_sqm=posted_land_price_per_sqm,
     )
 
 import os

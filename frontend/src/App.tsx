@@ -6,6 +6,15 @@ import {
 
 const TSUBO_RATIO = 3.305785;
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const STORAGE_KEY = 'tochihantei_history';
+
+interface SavedRecord {
+  id: string;
+  savedAt: string;
+  address: string;
+  parsedData: ParsedData;
+  simResult: SimResult;
+}
 
 interface ParsedData {
   address: string;
@@ -44,6 +53,11 @@ interface SimResult {
   net_area_tsubo: number;
   premium_multiplier: number;
   report_data: { expenses: CostDetail[]; revenues: CostDetail[] };
+  road_setline_slope: number;
+  road_setline_max_height_0m: number;
+  road_setline_max_height_5m: number;
+  road_setline_note: string;
+  posted_land_price_per_sqm: number | null;
 }
 
 export default function App() {
@@ -56,7 +70,70 @@ export default function App() {
   const [assemblyCostInput, setAssemblyCostInput] = useState<string>('');
   const [mailText, setMailText] = useState<string>('');
   const [isSimulating, setIsSimulating] = useState(false);
+  const [history, setHistory] = useState<SavedRecord[]>(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+  });
+  const [showHistory, setShowHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const saveToHistory = () => {
+    if (!parsedData || !simResult) return;
+    const record: SavedRecord = {
+      id: Date.now().toString(),
+      savedAt: new Date().toLocaleString('ja-JP'),
+      address: parsedData.address,
+      parsedData,
+      simResult,
+    };
+    const next = [record, ...history].slice(0, 20);
+    setHistory(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const deleteFromHistory = (id: string) => {
+    const next = history.filter(r => r.id !== id);
+    setHistory(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const loadFromHistory = (record: SavedRecord) => {
+    setParsedData(record.parsedData);
+    setSimResult(record.simResult);
+    setRoadWidth(String(record.parsedData.road_width_m));
+    setShowHistory(false);
+  };
+
+  const downloadCsv = () => {
+    if (!parsedData || !simResult) return;
+    const rows: string[][] = [
+      ['項目', '値'],
+      ['住所', parsedData.address],
+      ['面積（㎡）', String(parsedData.area_sqm)],
+      ['用途地域', parsedData.land_use_zone],
+      ['容積率（%）', String(parsedData.floor_area_ratio)],
+      ['実行容積率（%）', String(simResult.effective_far)],
+      ['最大延床（㎡）', String(simResult.max_floor_area_sqm.toFixed(1))],
+      ['有効専有（坪）', String(simResult.net_area_tsubo.toFixed(1))],
+      ['道路斜線制限（境界線上）', `${simResult.road_setline_max_height_0m}m`],
+      ['道路斜線制限（5m後退）', `${simResult.road_setline_max_height_5m}m`],
+      ...(simResult.posted_land_price_per_sqm != null ? [['公示地価（万円/㎡）', String(Math.round(simResult.posted_land_price_per_sqm / 10000))]] : []),
+      ['宅地相場（万円/坪）', String((simResult.market_price_per_tsubo / 10000).toFixed(0))],
+      ['中古マンション相場（万円/坪）', String((simResult.condo_market_price_per_tsubo / 10000).toFixed(0))],
+      ['出口坪単価（万円/坪）', String((simResult.sales_price_per_tsubo / 10000).toFixed(0))],
+      ['土地出口総額（万円）', String(Math.round(simResult.land_exit_total / 10000))],
+      ...simResult.report_data.expenses.map(e => [e.name + '（万円）', String(Math.round(e.amount / 10000))]),
+      ...simResult.report_data.revenues.map(r => [r.name + '（万円）', String(Math.round(r.amount / 10000))]),
+      ...(simResult.profit_total != null ? [['純利益（万円）', String(Math.round(simResult.profit_total / 10000))], ['利益率（%）', String(simResult.profit_margin?.toFixed(1))]] : []),
+    ];
+    const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tochihantei_${parsedData.address.replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac: string) => {
     const payload: Record<string, unknown> = {
@@ -489,10 +566,56 @@ export default function App() {
 
         {/* ===== 右カラム ===== */}
         <div className={`bg-[#121214] rounded-xl border border-gray-800 p-6 flex flex-col gap-5 transition-opacity duration-500 ${simResult ? 'opacity-100' : 'opacity-40'}`}>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-gray-400" />
-            採算シミュレーション結果
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-gray-400" />
+              採算シミュレーション結果
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowHistory(v => !v)}
+                className="text-xs px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+              >
+                履歴 {history.length > 0 && `(${history.length})`}
+              </button>
+              {simResult && (
+                <>
+                  <button
+                    onClick={saveToHistory}
+                    className="text-xs px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={downloadCsv}
+                    className="text-xs px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-gray-300 hover:text-white transition-colors"
+                  >
+                    CSV
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {showHistory && (
+            <div className="bg-gray-900/80 rounded-lg border border-gray-700 p-3 max-h-60 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-4">保存済みデータなし</p>
+              ) : (
+                <ul className="space-y-1">
+                  {history.map(rec => (
+                    <li key={rec.id} className="flex items-center justify-between gap-2 text-xs py-1.5 border-b border-gray-800 last:border-0">
+                      <button onClick={() => loadFromHistory(rec)} className="text-left flex-1 hover:text-blue-300 transition-colors">
+                        <span className="text-gray-300">{rec.address}</span>
+                        <span className="text-gray-600 ml-2">{rec.savedAt}</span>
+                      </button>
+                      <button onClick={() => deleteFromHistory(rec.id)} className="text-gray-600 hover:text-red-400 px-1 transition-colors">✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {simResult ? (
             <>
@@ -514,6 +637,13 @@ export default function App() {
                   </div>
                 </div>
                 <p className="text-[10px] text-gray-600 mt-3">{simResult.far_calc_basis}</p>
+                <div className="mt-3 pt-3 border-t border-gray-700/50">
+                  <p className="text-xs text-gray-500 mb-1">道路斜線制限（概算・{simResult.road_setline_note}）</p>
+                  <div className="flex gap-4 text-xs font-mono">
+                    <span className="text-gray-400">境界線上: <span className="text-white">{simResult.road_setline_max_height_0m}m</span></span>
+                    <span className="text-gray-400">5m後退: <span className="text-white">{simResult.road_setline_max_height_5m}m</span></span>
+                  </div>
+                </div>
               </div>
 
               {/* 収支表 */}
@@ -534,7 +664,7 @@ export default function App() {
                           <p className="text-[10px] text-gray-500">{e.note}</p>
                         </div>
                         <p className="text-sm font-mono font-bold">
-                          {e.amount > 0 ? `${(e.amount / 10000).toLocaleString()}万円` : '－'}
+                          {e.amount > 0 ? `${Math.round(e.amount / 10000).toLocaleString()}万円` : '－'}
                         </p>
                       </div>
                     );
@@ -546,7 +676,7 @@ export default function App() {
                         <p className="text-sm text-blue-300">{rv.name}</p>
                         <p className="text-[10px] text-gray-500">{rv.note}</p>
                       </div>
-                      <p className="text-sm font-mono font-bold text-blue-400">{(rv.amount / 10000).toLocaleString()}万円</p>
+                      <p className="text-sm font-mono font-bold text-blue-400">{Math.round(rv.amount / 10000).toLocaleString()}万円</p>
                     </div>
                   ))}
 
@@ -572,7 +702,7 @@ export default function App() {
                         ${simResult.profit_margin! >= 20 ? 'text-green-400'
                           : simResult.profit_margin! >= 10 ? 'text-yellow-400'
                           : 'text-red-400'}`}>
-                        {(simResult.profit_total / 10000).toLocaleString()}万円
+                        {Math.round(simResult.profit_total / 10000).toLocaleString()}万円
                       </p>
                     </div>
                   )}
@@ -587,13 +717,16 @@ export default function App() {
                     宅地相場 {(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪 × {(simResult.max_floor_area_sqm / simResult.effective_far * 100 / TSUBO_RATIO).toFixed(1)}坪
                   </span>
                   <span className="text-base font-bold font-mono text-gray-200">
-                    {(simResult.land_exit_total / 10000).toLocaleString()}万円
+                    {Math.round(simResult.land_exit_total / 10000).toLocaleString()}万円
                   </span>
                 </div>
               </div>
 
               {/* 相場メモ */}
               <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                {simResult.posted_land_price_per_sqm != null && (
+                  <span>公示地価: <span className="text-emerald-300 font-mono">{Math.round(simResult.posted_land_price_per_sqm / 10000)}万円/㎡</span>（{Math.round(simResult.posted_land_price_per_sqm * 3.305785 / 10000)}万円/坪）</span>
+                )}
                 <span>宅地相場: <span className="text-gray-300 font-mono">{(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 <span>中古マンション相場: <span className="text-gray-300 font-mono">{(simResult.condo_market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span></span>
                 <span>出口坪単価: <span className="text-blue-300 font-mono">{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>（×{simResult.premium_multiplier.toFixed(1)}・エリア推定）</span>

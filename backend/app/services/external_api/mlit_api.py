@@ -162,6 +162,38 @@ def _calc_condo_avg_tsubo_price(transactions: List[dict]) -> float:
     return total / count if count > 0 else 0.0
 
 
+def fetch_posted_land_price(address: str) -> Optional[float]:
+    """
+    公示地価（地価公示）の平均価格（円/㎡）を返す。
+    REINFOLIB XKT001 エンドポイントを使用。
+    """
+    city_code = get_city_code_from_address(address)
+    pref_code = city_code[:2]  # 都道府県コード（東京=13）
+    headers = {"Ocp-Apim-Subscription-Key": API_KEY}
+    url = f"https://www.reinfolib.mlit.go.jp/ex-api/external/XKT001?area={pref_code}&city={city_code}&preferType=01"
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"[mlit_api] 公示地価APIエラー: {resp.status_code}")
+            return None
+        data = resp.json().get("data", [])
+        prices = []
+        for item in data:
+            try:
+                price = float(item.get("CurPrice") or 0)
+                if price > 0:
+                    prices.append(price)
+            except (ValueError, TypeError):
+                continue
+        if prices:
+            avg = sum(prices) / len(prices)
+            print(f"[mlit_api] 公示地価: {address} → {avg:,.0f}円/㎡（{len(prices)}地点平均）")
+            return avg
+    except Exception as e:
+        print(f"[mlit_api] 公示地価取得エラー: {e}")
+    return None
+
+
 def _fetch_from_api(city_code: str, target_far: float) -> float:
     """APIから過去5年分を取得して平均坪単価を返す"""
     current_year = datetime.datetime.now().year

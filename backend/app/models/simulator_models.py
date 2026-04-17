@@ -32,3 +32,10 @@ class SimulatorResponse(BaseModel):
     premium_multiplier: float = 1.4
     report_data: Dict[str, List[CostDetail]]
     report_text: Optional[str] = ""
+    # 道路斜線制限（概算）
+    road_setline_slope: float = 1.25
+    road_setline_max_height_0m: float = 0.0
+    road_setline_max_height_5m: float = 0.0
+    road_setline_note: str = ""
+    # 公示地価
+    posted_land_price_per_sqm: Optional[float] = None
