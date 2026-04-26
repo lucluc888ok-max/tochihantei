@@ -39,3 +39,11 @@ class SimulatorResponse(BaseModel):
     road_setline_note: str = ""
     # 公示地価
     posted_land_price_per_sqm: Optional[float] = None
+    # 天空率・日影規制（簡易試算）
+    estimated_building_height_m: float = 0.0
+    sky_factor_proposed: float = 0.0
+    sky_factor_compliant: float = 0.0
+    sky_factor_passes: bool = True
+    shadow_max_length_m: float = 0.0
+    shadow_is_regulated: bool = False
+    shadow_note: str = ""

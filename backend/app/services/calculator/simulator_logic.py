@@ -119,6 +119,66 @@ def _get_new_construction_premium(address: str, condo_price: float, zoning: str 
         print(f"[premium] Gemini失敗、1.4を使用: {e}")
         return 1.4
 
+def _calculate_sky_factor_simple(h: float, w: float, d: float) -> float:
+    """天空率の簡易計算（矩形建物・単一測定点）"""
+    if d <= 0 or h <= 0 or w <= 0:
+        return 1.0
+    alpha = math.atan2(w / 2, d)
+    beta = math.atan2(h, d)
+    obstruction = (2 * alpha * math.sin(beta)) / (2 * math.pi)
+    return max(0.0, min(1.0, round(1.0 - obstruction, 4)))
+
+def _calculate_sky_and_shadow(
+    area_sqm: float,
+    effective_far: float,
+    road_width: float,
+    road_setline_slope: float,
+    is_residential: bool,
+) -> dict:
+    """天空率・日影規制の簡易試算"""
+    # 建物幅を土地面積から推定（正方形仮定）
+    building_width = math.sqrt(max(area_sqm, 1.0))
+
+    # 建物高さの推定（容積率 ÷ 想定建蔽率60% × 3.3m/階）
+    assumed_coverage = 0.60
+    floors = (effective_far / 100.0) / assumed_coverage
+    building_height = round(floors * 3.3, 1)
+
+    # 測定点：道路中心（道路幅員/2の距離）
+    measure_distance = max(road_width / 2, 0.5)
+
+    # 道路斜線の適合建築物高さ（境界線上）
+    setline_height = road_width * road_setline_slope
+
+    # 天空率計算
+    proposed_sf = _calculate_sky_factor_simple(building_height, building_width, measure_distance)
+    compliant_sf = _calculate_sky_factor_simple(setline_height, building_width, measure_distance)
+    sky_passes = proposed_sf >= compliant_sf
+
+    # 日影規制（東京・冬至日 北緯35.7度）
+    solar_altitude_rad = math.radians(90 - 35.7 - 23.4)  # ≈ 30.9度
+    shadow_ratio = 1.0 / math.tan(solar_altitude_rad)
+    max_shadow_m = round(building_height * shadow_ratio, 1)
+
+    # 規制対象：住居系は高さ10m超、商業・準住居は高さ15m超
+    regulated_limit = 10 if is_residential else 15
+    is_regulated = building_height > regulated_limit
+
+    if is_regulated:
+        shadow_note = f"建物高さ約{building_height}m推定 → 冬至日の最大影長 約{max_shadow_m}m（日影規制要確認）"
+    else:
+        shadow_note = f"建物高さ約{building_height}m推定 → 日影規制対象外（{regulated_limit}m以下）"
+
+    return {
+        "estimated_building_height_m": building_height,
+        "sky_factor_proposed": proposed_sf,
+        "sky_factor_compliant": compliant_sf,
+        "sky_factor_passes": sky_passes,
+        "shadow_max_length_m": max_shadow_m,
+        "shadow_is_regulated": is_regulated,
+        "shadow_note": shadow_note,
+    }
+
 def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     # 1. 実行容積率の計算
     res_zones = ["第一種低層住居専用地域", "第二種低層住居専用地域", "第一種中高層住居専用地域", "第二種中高層住居専用地域", "第一種住居地域", "第二種住居地域", "準住居地域", "田園住居地域", "住居系"]
@@ -239,6 +299,15 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         "revenues": revenues_list
     }
 
+    # 天空率・日影規制の簡易試算
+    sky_shadow = _calculate_sky_and_shadow(
+        area_sqm=req.area_sqm,
+        effective_far=effective_far,
+        road_width=req.road_width,
+        road_setline_slope=road_setline_slope,
+        is_residential=is_residential,
+    )
+
     return SimulatorResponse(
         effective_far=effective_far,
         far_calc_basis=far_calc_basis,
@@ -261,6 +330,7 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         road_setline_max_height_5m=road_setline_max_height_5m,
         road_setline_note=road_setline_note,
         posted_land_price_per_sqm=posted_land_price_per_sqm,
+        **sky_shadow,
     )
 
 import os
