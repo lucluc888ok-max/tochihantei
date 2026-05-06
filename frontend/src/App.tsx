@@ -329,7 +329,7 @@ export default function App() {
 
       {/* ヘッダー */}
       <header className="bg-white border-b border-[#E5E7EB] px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-        <span className="text-sm font-medium text-[#111827]">土地購入シミュレーター</span>
+        <span className="text-sm font-medium text-[#111827]">土地判定シミュレーター | tochi-ai.com</span>
         <div className="flex items-center gap-2">
           {simResult && (
             <span className="text-xs bg-[#DCFCE7] text-[#15803D] px-3 py-1 rounded-full font-medium">✓ 試算完了</span>
