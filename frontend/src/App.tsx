@@ -151,6 +151,7 @@ export default function App() {
   const [compareList, setCompareList] = useState<CompareItem[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [shareToast, setShareToast] = useState(false);
+  const [mapRetryKey, setMapRetryKey] = useState(0);
   const resultRef2 = useRef<HTMLDivElement>(null);
 
   const fetchUsage = async (u: User) => {
@@ -264,7 +265,7 @@ export default function App() {
       if (!cancelled) { setMapData({ ...coords, stations }); setIsLoadingMap(false); }
     }, 600);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [parsedData?.address]);
+  }, [parsedData?.address, mapRetryKey]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -986,8 +987,17 @@ export default function App() {
                 )}
               </>
             ) : (
-              <div className="h-[80px] bg-[#F9FAFB] rounded-lg flex items-center justify-center">
+              <div className="h-[100px] bg-[#F9FAFB] rounded-lg flex flex-col items-center justify-center gap-2">
                 <p className="text-xs text-[#9CA3AF]">住所から地図を表示できませんでした</p>
+                {parsedData?.address && (
+                  <p className="text-xs text-[#D1D5DB]">「{parsedData.address}」</p>
+                )}
+                <button
+                  onClick={() => setMapRetryKey(k => k + 1)}
+                  className="text-xs text-[#2563EB] hover:underline mt-1"
+                >
+                  再試行
+                </button>
               </div>
             )}
           </div>
