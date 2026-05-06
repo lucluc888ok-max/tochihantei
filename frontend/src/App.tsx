@@ -68,6 +68,12 @@ interface SavedRecord {
   simResult: SimResult;
 }
 
+interface CompareItem {
+  label: string;
+  parsedData: ParsedData;
+  simResult: SimResult;
+}
+
 interface ParsedData {
   address: string;
   area_sqm: number;
@@ -149,6 +155,10 @@ export default function App() {
   const [limitReached, setLimitReached] = useState(false);
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [isLoadingMap, setIsLoadingMap] = useState(false);
+  const [compareList, setCompareList] = useState<CompareItem[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
+  const [shareToast, setShareToast] = useState(false);
+  const resultRef2 = useRef<HTMLDivElement>(null);
 
   const fetchUsage = async (u: User) => {
     try {
@@ -173,8 +183,25 @@ export default function App() {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setAuthLoading(false);
-      if (u) await fetchUsage(u);
+      if (u) {
+        await fetchUsage(u);
+        await loadCloudHistory(u);
+      }
     });
+  }, []);
+
+  useEffect(() => {
+    const shareId = new URLSearchParams(window.location.search).get('share');
+    if (!shareId) return;
+    (async () => {
+      const res = await fetch(`${BASE_URL}/api/share/${shareId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setParsedData(data.parsed_data);
+        setSimResult(data.sim_result);
+        window.history.replaceState({}, '', '/');
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -221,24 +248,98 @@ export default function App() {
     setUser(null); setUsageCount(0); setLimitReached(false);
   };
 
-  const saveToHistory = () => {
-    if (!parsedData || !simResult) return;
-    const record: SavedRecord = {
-      id: Date.now().toString(),
-      savedAt: new Date().toLocaleString('ja-JP'),
-      address: parsedData.address,
-      parsedData,
-      simResult,
-    };
-    const next = [record, ...history].slice(0, 20);
-    setHistory(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const loadCloudHistory = async (u: User) => {
+    try {
+      const token = await u.getIdToken();
+      const res = await fetch(`${BASE_URL}/api/simulations`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        const records: SavedRecord[] = data.simulations.map((s: any) => ({
+          id: s.id,
+          savedAt: new Date(s.saved_at).toLocaleString('ja-JP'),
+          address: s.address,
+          parsedData: s.parsed_data,
+          simResult: s.sim_result,
+        }));
+        setHistory(records);
+      }
+    } catch { /* ignore */ }
   };
 
-  const deleteFromHistory = (id: string) => {
-    const next = history.filter(r => r.id !== id);
-    setHistory(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const saveToHistory = async () => {
+    if (!parsedData || !simResult) return;
+    if (user && AUTH_ENABLED) {
+      try {
+        const token = await user.getIdToken();
+        await fetch(`${BASE_URL}/api/simulations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ address: parsedData.address, parsed_data: parsedData, sim_result: simResult }),
+        });
+        await loadCloudHistory(user);
+      } catch { /* ignore */ }
+    } else {
+      const record: SavedRecord = {
+        id: Date.now().toString(),
+        savedAt: new Date().toLocaleString('ja-JP'),
+        address: parsedData.address,
+        parsedData,
+        simResult,
+      };
+      const next = [record, ...history].slice(0, 20);
+      setHistory(next);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }
+  };
+
+  const deleteFromHistory = async (id: string) => {
+    if (user && AUTH_ENABLED) {
+      try {
+        const token = await user.getIdToken();
+        await fetch(`${BASE_URL}/api/simulations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        await loadCloudHistory(user);
+      } catch { /* ignore */ }
+    } else {
+      const next = history.filter(r => r.id !== id);
+      setHistory(next);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }
+  };
+
+  const handleShare = async () => {
+    if (!parsedData || !simResult) return;
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user && AUTH_ENABLED) headers['Authorization'] = `Bearer ${await user.getIdToken()}`;
+      const res = await fetch(`${BASE_URL}/api/share`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ address: parsedData.address, parsed_data: parsedData, sim_result: simResult }),
+      });
+      if (res.ok) {
+        const { id } = await res.json();
+        await navigator.clipboard.writeText(`${window.location.origin}?share=${id}`);
+        setShareToast(true);
+        setTimeout(() => setShareToast(false), 3000);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const addToCompare = () => {
+    if (!parsedData || !simResult) return;
+    if (compareList.length >= 3) { alert('比較できるのは最大3件です'); return; }
+    setCompareList(prev => [...prev, { label: parsedData.address, parsedData, simResult }]);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!resultRef2.current) return;
+    const { default: html2canvas } = await import('html2canvas');
+    const { jsPDF } = await import('jspdf');
+    const canvas = await html2canvas(resultRef2.current, { scale: 1.5, useCORS: true });
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const w = pdf.internal.pageSize.getWidth();
+    const h = (canvas.height * w) / canvas.width;
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
+    pdf.save(`tochi-ai_${parsedData?.address ?? 'report'}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const loadFromHistory = (record: SavedRecord) => {
@@ -547,6 +648,9 @@ export default function App() {
             <>
               <button onClick={saveToHistory} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">保存</button>
               <button onClick={downloadCsv} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">CSV</button>
+              <button onClick={handleDownloadPDF} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">PDF</button>
+              <button onClick={handleShare} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">共有</button>
+              <button onClick={addToCompare} className="text-xs px-3 py-1.5 border border-[#2563EB] rounded-lg text-[#2563EB] hover:bg-blue-50 transition-colors">比較に追加</button>
             </>
           )}
           {AUTH_ENABLED && user && (
@@ -556,6 +660,13 @@ export default function App() {
           )}
         </div>
       </header>
+
+      {/* 共有トースト */}
+      {shareToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111827] text-white text-xs px-4 py-2 rounded-full shadow-lg z-50">
+          共有リンクをクリップボードにコピーしました
+        </div>
+      )}
 
       {/* 利用上限バナー */}
       {limitReached && (
@@ -819,9 +930,59 @@ export default function App() {
           </div>
         )}
 
+        {/* ===== 比較パネル ===== */}
+        {compareList.length >= 2 && (
+          <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-[#6B7280]">物件比較（{compareList.length}件）</p>
+              <div className="flex gap-2">
+                <button onClick={() => setShowCompare(v => !v)} className="text-xs text-[#2563EB] hover:underline">{showCompare ? '閉じる' : '展開'}</button>
+                <button onClick={() => setCompareList([])} className="text-xs text-[#9CA3AF] hover:underline">クリア</button>
+              </div>
+            </div>
+            {showCompare && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#F3F4F6]">
+                      <th className="text-left py-2 pr-4 text-[#6B7280] font-medium w-32">項目</th>
+                      {compareList.map((c, i) => (
+                        <th key={i} className="text-right py-2 px-3 text-[#374151] font-medium">
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="truncate max-w-[120px]">{c.label.replace('東京都', '')}</span>
+                            <button onClick={() => setCompareList(prev => prev.filter((_, j) => j !== i))} className="text-[#9CA3AF] hover:text-red-400">✕</button>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label: '実行容積率', fn: (c: CompareItem) => `${c.simResult.effective_far}%` },
+                      { label: '出口総額', fn: (c: CompareItem) => `${Math.round(c.simResult.land_exit_total / 10000).toLocaleString()}万円` },
+                      { label: '出口坪単価', fn: (c: CompareItem) => `${Math.round(c.simResult.sales_price_per_tsubo / 10000)}万円` },
+                      { label: '純利益', fn: (c: CompareItem) => c.simResult.profit_total != null ? `${Math.round(c.simResult.profit_total / 10000).toLocaleString()}万円` : '－' },
+                      { label: '利益率', fn: (c: CompareItem) => c.simResult.profit_margin != null ? `${c.simResult.profit_margin.toFixed(1)}%` : '－' },
+                      { label: '天空率', fn: (c: CompareItem) => c.simResult.sky_factor_passes != null ? (c.simResult.sky_factor_passes ? '✓ 適合' : '✗ 超過') : '－' },
+                    ].map(row => (
+                      <tr key={row.label} className="border-b border-[#F9FAFB]">
+                        <td className="py-2 pr-4 text-[#6B7280]">{row.label}</td>
+                        {compareList.map((c, i) => (
+                          <td key={i} className="py-2 px-3 text-right text-[#111827] font-medium">{row.fn(c)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===== 結果エリア ===== */}
         {simResult && (
           <div ref={resultRef} className="space-y-4">
+          <div ref={resultRef2}>
 
             {/* HERO */}
             <div className="bg-white rounded-xl border border-[#E5E7EB] p-8 text-center">
@@ -1115,6 +1276,7 @@ export default function App() {
               </div>
             )}
 
+          </div>
           </div>
         )}
       </div>
