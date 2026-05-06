@@ -218,7 +218,12 @@ export default function App() {
         const map = new google.maps.Map(mapContainerRef.current, {
           center: { lat: mapData.lat, lng: mapData.lng },
           zoom: 18,
-          mapTypeId: 'hybrid',
+          mapTypeId: 'roadmap',
+          mapTypeControl: true,
+          mapTypeControlOptions: {
+            mapTypeIds: ['roadmap', 'hybrid'],
+            position: google.maps.ControlPosition.TOP_LEFT,
+          },
         });
         new google.maps.Marker({ position: { lat: mapData.lat, lng: mapData.lng }, map });
         try {
