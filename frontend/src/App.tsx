@@ -96,6 +96,7 @@ export default function App() {
   const [usageCount, setUsageCount] = useState(0);
   const [usageLimit] = useState(5);
   const [limitReached, setLimitReached] = useState(false);
+  const [isEditingParsed, setIsEditingParsed] = useState(false);
 
   const fetchUsage = async (u: User) => {
     try {
@@ -592,19 +593,64 @@ export default function App() {
               {/* AI抽出データ */}
               {parsedData ? (
                 <div>
-                  <label className="text-xs font-medium text-[#6B7280] mb-2 block">📂 AI自動抽出データ</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-[#6B7280]">📂 AI自動抽出データ</label>
+                    <button
+                      onClick={() => setIsEditingParsed(v => !v)}
+                      className="text-xs text-[#2563EB] hover:underline"
+                    >
+                      {isEditingParsed ? '確定' : '編集'}
+                    </button>
+                  </div>
                   <div className="border border-[#E5E7EB] rounded-lg divide-y divide-[#F9FAFB]">
-                    {[
-                      { label: '所在地', value: parsedData.address || '－' },
-                      { label: '面積', value: `${parsedData.area_sqm} ㎡（${(parsedData.area_sqm / TSUBO_RATIO).toFixed(1)}坪）` },
-                      { label: '用途地域', value: parsedData.land_use_zone || '－' },
-                      { label: '容積率 / 建蔽率', value: `${parsedData.floor_area_ratio}%${parsedData.coverage_ratio > 0 ? ` / ${parsedData.coverage_ratio}%` : ''}` },
-                    ].map(row => (
-                      <div key={row.label} className="flex justify-between items-center px-3 py-2.5">
-                        <span className="text-xs text-[#6B7280]">{row.label}</span>
-                        <span className="text-xs font-medium text-[#111827] text-right max-w-[55%]">{row.value}</span>
-                      </div>
-                    ))}
+                    {/* 所在地 */}
+                    <div className="flex justify-between items-center px-3 py-2.5 gap-2">
+                      <span className="text-xs text-[#6B7280] shrink-0">所在地</span>
+                      {isEditingParsed ? (
+                        <input type="text" value={parsedData.address}
+                          onChange={e => setParsedData(d => d ? { ...d, address: e.target.value } : d)}
+                          className="text-xs text-[#111827] bg-[#F9FAFB] border border-[#E5E7EB] rounded px-2 py-1 w-full text-right focus:outline-none focus:border-[#2563EB]"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-[#111827] text-right max-w-[55%]">{parsedData.address || '－'}</span>
+                      )}
+                    </div>
+                    {/* 面積 */}
+                    <div className="flex justify-between items-center px-3 py-2.5 gap-2">
+                      <span className="text-xs text-[#6B7280] shrink-0">面積（㎡）</span>
+                      {isEditingParsed ? (
+                        <input type="number" step="0.01" min="0" value={parsedData.area_sqm}
+                          onChange={e => setParsedData(d => d ? { ...d, area_sqm: parseFloat(e.target.value) || 0 } : d)}
+                          className="text-xs text-[#111827] bg-[#F9FAFB] border border-[#E5E7EB] rounded px-2 py-1 w-28 text-right focus:outline-none focus:border-[#2563EB]"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-[#111827]">{parsedData.area_sqm} ㎡（{(parsedData.area_sqm / TSUBO_RATIO).toFixed(1)}坪）</span>
+                      )}
+                    </div>
+                    {/* 用途地域 */}
+                    <div className="flex justify-between items-center px-3 py-2.5 gap-2">
+                      <span className="text-xs text-[#6B7280] shrink-0">用途地域</span>
+                      {isEditingParsed ? (
+                        <input type="text" value={parsedData.land_use_zone}
+                          onChange={e => setParsedData(d => d ? { ...d, land_use_zone: e.target.value } : d)}
+                          className="text-xs text-[#111827] bg-[#F9FAFB] border border-[#E5E7EB] rounded px-2 py-1 w-full text-right focus:outline-none focus:border-[#2563EB]"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-[#111827] text-right max-w-[55%]">{parsedData.land_use_zone || '－'}</span>
+                      )}
+                    </div>
+                    {/* 容積率 */}
+                    <div className="flex justify-between items-center px-3 py-2.5 gap-2">
+                      <span className="text-xs text-[#6B7280] shrink-0">容積率（%）</span>
+                      {isEditingParsed ? (
+                        <input type="number" step="10" min="0" value={parsedData.floor_area_ratio}
+                          onChange={e => setParsedData(d => d ? { ...d, floor_area_ratio: parseFloat(e.target.value) || 0 } : d)}
+                          className="text-xs text-[#111827] bg-[#F9FAFB] border border-[#E5E7EB] rounded px-2 py-1 w-24 text-right focus:outline-none focus:border-[#2563EB]"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-[#111827]">{parsedData.floor_area_ratio}%{parsedData.coverage_ratio > 0 ? ` / ${parsedData.coverage_ratio}%` : ''}</span>
+                      )}
+                    </div>
                     {parsedData.setback_area_estimated > 0 && (
                       <div className="flex justify-between items-center px-3 py-2.5 bg-orange-50">
                         <span className="text-xs text-orange-500">⚠ セットバック</span>
@@ -618,6 +664,9 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  {isEditingParsed && (
+                    <p className="text-xs text-amber-600 mt-1.5">※ 住所を変更した場合はシミュレーションを再実行してください</p>
+                  )}
                 </div>
               ) : (
                 <div className="border border-dashed border-[#E5E7EB] rounded-xl p-6 flex items-center justify-center min-h-[100px]">
