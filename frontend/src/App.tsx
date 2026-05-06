@@ -1,4 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from './firebase';
+import type { User } from './firebase';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
@@ -84,6 +86,74 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
+  // 認証・利用制限
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(AUTH_ENABLED);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [usageCount, setUsageCount] = useState(0);
+  const [usageLimit] = useState(5);
+  const [limitReached, setLimitReached] = useState(false);
+
+  const fetchUsage = async (u: User) => {
+    try {
+      const token = await u.getIdToken();
+      const res = await fetch(`${BASE_URL}/api/usage`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsageCount(data.count);
+        setLimitReached(data.remaining === 0);
+      }
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (!AUTH_ENABLED || !auth) {
+      setAuthLoading(false);
+      return;
+    }
+    return onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      setAuthLoading(false);
+      if (u) await fetchUsage(u);
+    });
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    setAuthError('');
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      setLoginEmail(''); setLoginPassword('');
+    } catch {
+      setAuthError('メールアドレスまたはパスワードが正しくありません');
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    setAuthError('');
+    if (loginPassword.length < 6) { setAuthError('パスワードは6文字以上にしてください'); return; }
+    try {
+      await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+      setLoginEmail(''); setLoginPassword('');
+    } catch {
+      setAuthError('登録に失敗しました。このメールアドレスはすでに使用されている可能性があります');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    await signOut(auth);
+    setUser(null); setUsageCount(0); setLimitReached(false);
+  };
+
   const saveToHistory = () => {
     if (!parsedData || !simResult) return;
     const record: SavedRecord = {
@@ -156,13 +226,19 @@ export default function App() {
     if (pp.trim() && !isNaN(ppNum) && ppNum > 0) payload.purchase_price = ppNum;
     const acNum = parseFloat(ac) * 10000;
     if (ac.trim() && !isNaN(acNum) && acNum > 0) payload.assembly_cost = acNum;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AUTH_ENABLED && auth?.currentUser) {
+      headers['Authorization'] = `Bearer ${await auth.currentUser.getIdToken()}`;
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120000);
     let res: Response;
     try {
       res = await fetch(`${BASE_URL}/api/simulate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
@@ -296,12 +372,17 @@ export default function App() {
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'limit_reached') {
+        setLimitReached(true);
+        return;
+      }
       const isTimeout = msg.includes('abort') || msg.includes('timeout');
       alert(isTimeout
         ? `サーバーが起動中です。\n\n初回アクセス時は60〜90秒かかる場合があります。\nしばらく待ってから再度「シミュレーション実行」を押してください。`
         : `シミュレーションに失敗しました。\n\n詳細: ${msg}`);
     } finally {
       setIsSimulating(false);
+      if (user) fetchUsage(user);
     }
   };
 
@@ -324,8 +405,58 @@ export default function App() {
 
   const fmt = (n: number) => Math.round(n).toLocaleString('ja-JP');
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+        <p className="text-sm text-[#6B7280]">読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]" style={{ fontFamily: "'Noto Sans JP', 'Hiragino Sans', sans-serif" }}>
+
+      {/* ログインモーダル */}
+      {AUTH_ENABLED && !user && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+            <h2 className="text-lg font-semibold text-[#111827] mb-1">
+              {isRegisterMode ? 'アカウント登録' : 'ログイン'}
+            </h2>
+            <p className="text-xs text-[#6B7280] mb-6">tochi-ai.com</p>
+            <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1">メールアドレス</label>
+                <input
+                  type="email" required value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  placeholder="example@email.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1">パスワード</label>
+                <input
+                  type="password" required value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  placeholder={isRegisterMode ? '6文字以上' : ''}
+                />
+              </div>
+              {authError && <p className="text-xs text-red-500">{authError}</p>}
+              <button type="submit" className="w-full bg-[#2563EB] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#1D4ED8] transition-colors">
+                {isRegisterMode ? '登録する' : 'ログイン'}
+              </button>
+            </form>
+            <button
+              onClick={() => { setIsRegisterMode(v => !v); setAuthError(''); }}
+              className="mt-4 w-full text-center text-xs text-[#2563EB] hover:underline"
+            >
+              {isRegisterMode ? 'すでにアカウントをお持ちの方はログイン' : 'アカウントをお持ちでない方は登録'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ヘッダー */}
       <header className="bg-white border-b border-[#E5E7EB] px-6 py-3 flex items-center justify-between sticky top-0 z-10">
@@ -333,6 +464,11 @@ export default function App() {
         <div className="flex items-center gap-2">
           {simResult && (
             <span className="text-xs bg-[#DCFCE7] text-[#15803D] px-3 py-1 rounded-full font-medium">✓ 試算完了</span>
+          )}
+          {AUTH_ENABLED && user && (
+            <span className="text-xs text-[#6B7280]">
+              今月: {usageCount}/{usageLimit}回
+            </span>
           )}
           <button
             onClick={() => setShowHistory(v => !v)}
@@ -346,8 +482,23 @@ export default function App() {
               <button onClick={downloadCsv} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">CSV</button>
             </>
           )}
+          {AUTH_ENABLED && user && (
+            <button onClick={handleLogout} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">
+              ログアウト
+            </button>
+          )}
         </div>
       </header>
+
+      {/* 利用上限バナー */}
+      {limitReached && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 text-center">
+          <p className="text-sm text-amber-800">
+            今月の無料利用上限（{usageLimit}回）に達しました。
+            <span className="font-medium ml-1">来月1日にリセットされます。</span>
+          </p>
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
@@ -516,7 +667,7 @@ export default function App() {
           <div className="mt-6 pt-5 border-t border-[#F3F4F6]">
             <button
               onClick={handleSimulate}
-              disabled={!parsedData || isSimulating}
+              disabled={!parsedData || isSimulating || limitReached}
               className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] text-white py-4 rounded-lg text-base font-medium transition-colors flex items-center justify-center gap-2"
             >
               {isSimulating

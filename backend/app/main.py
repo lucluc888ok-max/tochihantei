@@ -4,10 +4,12 @@ from pydantic import BaseModel
 from app.services.pdf_extractor.llm_parser import extract_property_data_with_llm, extract_property_data_from_text
 from app.services.external_api.mlit_api import fetch_mlit_transaction_data
 from app.api.endpoints import simulator
+from app.api.endpoints import usage
 
 app = FastAPI(title="Land Purchase Simulator API")
 
 app.include_router(simulator.router, prefix="/api", tags=["Simulator"])
+app.include_router(usage.router, prefix="/api", tags=["Usage"])
 
 ALLOWED_ORIGINS = [
     "https://tochi-ai.com",

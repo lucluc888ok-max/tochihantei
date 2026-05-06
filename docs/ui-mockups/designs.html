@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>土地判定 UI/UX デザイン案 5選</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .tab-btn.active { background: #1e40af; color: white; }
+  body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; }
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- タブナビゲーション -->
+<div class="bg-white shadow sticky top-0 z-10">
+  <div class="max-w-6xl mx-auto px-4 py-3">
+    <p class="text-xs text-gray-500 mb-2">土地判定シミュレーター UI/UX デザイン案</p>
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="showTab('a')" class="tab-btn active px-4 py-2 rounded text-sm font-medium border border-blue-800 transition">案A: ステッパー型</button>
+      <button onclick="showTab('b')" class="tab-btn px-4 py-2 rounded text-sm font-medium border border-gray-300 transition">案B: 2カラム型</button>
+      <button onclick="showTab('c')" class="tab-btn px-4 py-2 rounded text-sm font-medium border border-gray-300 transition">案C: 信号機判定型</button>
+      <button onclick="showTab('d')" class="tab-btn px-4 py-2 rounded text-sm font-medium border border-gray-300 transition">案D: アコーディオン型</button>
+      <button onclick="showTab('e')" class="tab-btn px-4 py-2 rounded text-sm font-medium border border-gray-300 transition">案E: モバイルカード型</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 案A: ステッパー型 ========== -->
+<div id="tab-a" class="tab-content active max-w-3xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <h2 class="text-lg font-bold text-gray-800 mb-1">案A: ステッパー型</h2>
+    <p class="text-sm text-gray-500">入力→確認→結果の3ステップで迷わず操作できる。現状の「何をすればいいか分からない」を解消。</p>
+  </div>
+
+  <!-- ステップインジケーター -->
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <div class="flex items-center justify-between mb-8">
+      <div class="flex flex-col items-center">
+        <div class="w-10 h-10 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">1</div>
+        <span class="text-xs mt-1 font-medium text-blue-700">物件情報入力</span>
+      </div>
+      <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+      <div class="flex flex-col items-center">
+        <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-sm">2</div>
+        <span class="text-xs mt-1 text-gray-400">条件確認</span>
+      </div>
+      <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+      <div class="flex flex-col items-center">
+        <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-sm">3</div>
+        <span class="text-xs mt-1 text-gray-400">シミュレーション結果</span>
+      </div>
+    </div>
+
+    <!-- Step 1 コンテンツ -->
+    <p class="text-sm font-semibold text-gray-700 mb-3">物件情報をメールまたはPDFから読み込む</p>
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center mb-4 bg-gray-50">
+      <div class="text-4xl mb-2">📄</div>
+      <p class="text-sm text-gray-600">PDFをドラッグ＆ドロップ</p>
+      <p class="text-xs text-gray-400 mt-1">または</p>
+      <button class="mt-2 px-4 py-1.5 bg-blue-50 text-blue-700 rounded text-sm border border-blue-200">ファイルを選択</button>
+    </div>
+    <div class="relative mb-4">
+      <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+      <div class="relative flex justify-center"><span class="bg-white px-3 text-xs text-gray-400">またはメール文をペースト</span></div>
+    </div>
+    <textarea class="w-full border border-gray-200 rounded-lg p-3 text-sm h-24 resize-none" placeholder="メール本文をここに貼り付けてください..."></textarea>
+    <button class="w-full mt-4 py-3 bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-800 transition">AI解析 → 次へ ›</button>
+  </div>
+
+  <!-- Step 2 プレビュー（グレーアウト） -->
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4 opacity-40">
+    <p class="text-sm font-semibold text-gray-700 mb-3">② 条件確認・調整</p>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-gray-50 rounded p-3">
+        <p class="text-xs text-gray-500">住所</p><p class="text-sm font-medium">東京都豊島区大塚...</p>
+      </div>
+      <div class="bg-gray-50 rounded p-3">
+        <p class="text-xs text-gray-500">面積</p><p class="text-sm font-medium">450 ㎡</p>
+      </div>
+      <div class="bg-gray-50 rounded p-3">
+        <p class="text-xs text-gray-500">容積率</p><p class="text-sm font-medium">400%</p>
+      </div>
+      <div class="bg-gray-50 rounded p-3">
+        <p class="text-xs text-gray-500">前面道路</p><p class="text-sm font-medium">6.0 m</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 プレビュー（グレーアウト） -->
+  <div class="bg-white rounded-xl shadow-sm p-6 opacity-40">
+    <p class="text-sm font-semibold text-gray-700 mb-3">③ シミュレーション結果</p>
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-green-50 rounded-lg p-3 text-center">
+        <p class="text-xs text-gray-500">利益率</p><p class="text-xl font-bold text-green-700">25.3%</p>
+      </div>
+      <div class="bg-blue-50 rounded-lg p-3 text-center">
+        <p class="text-xs text-gray-500">出口総額</p><p class="text-xl font-bold text-blue-700">112億</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-3 text-center">
+        <p class="text-xs text-gray-500">建築費</p><p class="text-xl font-bold text-gray-700">70億</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 案B: 2カラム型 ========== -->
+<div id="tab-b" class="tab-content max-w-6xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <h2 class="text-lg font-bold text-gray-800 mb-1">案B: 2カラム型（入力 ＋ リアルタイム結果）</h2>
+    <p class="text-sm text-gray-500">左で入力、右で即座に結果確認。数字を変えながらリアルタイムで採算感を掴める。</p>
+  </div>
+
+  <div class="flex gap-4">
+    <!-- 左: 入力 -->
+    <div class="w-1/2 space-y-4">
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <p class="text-sm font-bold text-gray-700 mb-3">📋 物件情報入力</p>
+        <textarea class="w-full border border-gray-200 rounded p-3 text-sm h-20 resize-none mb-3" placeholder="メール文をペースト..."></textarea>
+        <button class="w-full py-2 bg-blue-700 text-white rounded text-sm font-medium">AI解析</button>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <p class="text-sm font-bold text-gray-700 mb-3">⚙️ 条件調整</p>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-500">前面道路幅員 (m)</label>
+            <input class="w-full border border-gray-200 rounded p-2 text-sm mt-1" value="6.0" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">仕入れ価格 (万円)</label>
+            <input class="w-full border border-gray-200 rounded p-2 text-sm mt-1" placeholder="17,000" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">地上げ費 (万円)</label>
+            <input class="w-full border border-gray-200 rounded p-2 text-sm mt-1" placeholder="60,000" />
+          </div>
+          <button class="w-full py-2.5 bg-emerald-600 text-white rounded font-medium text-sm">▶ シミュレーション実行</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右: 結果 -->
+    <div class="w-1/2 space-y-4">
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <p class="text-sm font-bold text-gray-700 mb-3">📊 シミュレーション結果</p>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-green-50 border border-green-100 rounded-lg p-3 text-center">
+            <p class="text-xs text-gray-500 mb-1">利益率</p>
+            <p class="text-2xl font-bold text-green-700">25.3%</p>
+            <p class="text-xs text-green-600 mt-1">● 採算ライン超</p>
+          </div>
+          <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-center">
+            <p class="text-xs text-gray-500 mb-1">出口総額</p>
+            <p class="text-2xl font-bold text-blue-700">112億</p>
+            <p class="text-xs text-blue-500 mt-1">坪600万 × 1,870坪</p>
+          </div>
+        </div>
+        <!-- 簡易棒グラフ -->
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-gray-600">収支内訳</p>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1"><span>出口売上</span><span>112億</span></div>
+            <div class="h-4 bg-blue-500 rounded" style="width:100%"></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1"><span>建築費</span><span>70億</span></div>
+            <div class="h-4 bg-orange-400 rounded" style="width:62%"></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1"><span>仕入＋地上げ</span><span>7.7億</span></div>
+            <div class="h-4 bg-red-400 rounded" style="width:7%"></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1"><span>諸経費</span><span>7億</span></div>
+            <div class="h-4 bg-yellow-400 rounded" style="width:6%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <p class="text-sm font-bold text-gray-700 mb-3">🏗 建築ボリューム</p>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="bg-gray-50 rounded p-2">
+            <p class="text-xs text-gray-500">実行容積率</p>
+            <p class="font-bold text-gray-800">400%</p>
+          </div>
+          <div class="bg-gray-50 rounded p-2">
+            <p class="text-xs text-gray-500">延床面積</p>
+            <p class="font-bold text-gray-800">545坪</p>
+          </div>
+          <div class="bg-gray-50 rounded p-2">
+            <p class="text-xs text-gray-500">専有面積</p>
+            <p class="font-bold text-gray-800">447坪</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 案C: 信号機判定型 ========== -->
+<div id="tab-c" class="tab-content max-w-2xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <h2 class="text-lg font-bold text-gray-800 mb-1">案C: 信号機判定型</h2>
+    <p class="text-sm text-gray-500">「採算OK / 要検討 / NG」を一目で判定。意思決定のスピードを最優先にしたUI。</p>
+  </div>
+
+  <!-- 入力（最小限） -->
+  <div class="bg-white rounded-xl shadow-sm p-5 mb-4">
+    <textarea class="w-full border border-gray-200 rounded p-3 text-sm h-20 resize-none mb-3" placeholder="メール文をペースト..."></textarea>
+    <div class="flex gap-3">
+      <input class="flex-1 border border-gray-200 rounded p-2 text-sm" placeholder="仕入れ価格（万円）" />
+      <button class="px-6 py-2 bg-blue-700 text-white rounded font-medium text-sm">判定</button>
+    </div>
+  </div>
+
+  <!-- 判定結果 -->
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <!-- 信号機 -->
+    <div class="flex items-center justify-center gap-6 mb-6">
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl">🔴</div>
+        <span class="text-xs text-gray-400">NG</span>
+      </div>
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-20 h-20 rounded-full bg-yellow-400 border-4 border-yellow-500 shadow-lg flex items-center justify-center text-3xl">🟡</div>
+        <span class="text-sm font-bold text-yellow-600">要検討</span>
+      </div>
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl">🟢</div>
+        <span class="text-xs text-gray-400">採算OK</span>
+      </div>
+    </div>
+
+    <div class="text-center mb-6">
+      <p class="text-3xl font-bold text-yellow-600">利益率 18.2%</p>
+      <p class="text-sm text-gray-500 mt-1">採算ライン（20%）まであと 1.8%</p>
+    </div>
+
+    <!-- 3つのKPIのみ -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <p class="text-xs text-gray-500">出口総額</p>
+        <p class="font-bold text-gray-800 text-lg">112億</p>
+      </div>
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <p class="text-xs text-gray-500">総コスト</p>
+        <p class="font-bold text-gray-800 text-lg">91.6億</p>
+      </div>
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <p class="text-xs text-gray-500">利益</p>
+        <p class="font-bold text-gray-800 text-lg">20.4億</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 詳細折りたたみ -->
+  <div class="bg-white rounded-xl shadow-sm p-5">
+    <button class="w-full flex justify-between items-center text-sm text-gray-600 font-medium">
+      <span>詳細データを見る</span>
+      <span class="text-gray-400">▼</span>
+    </button>
+  </div>
+</div>
+
+<!-- ========== 案D: アコーディオン型 ========== -->
+<div id="tab-d" class="tab-content max-w-2xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+    <h2 class="text-lg font-bold text-gray-800 mb-1">案D: アコーディオン型</h2>
+    <p class="text-sm text-gray-500">各セクションを折りたたんで管理。情報量が多くても画面がすっきり。熟練ユーザー向け。</p>
+  </div>
+
+  <!-- セクション1: 開いている状態 -->
+  <div class="bg-white rounded-xl shadow-sm mb-3 overflow-hidden">
+    <div class="flex items-center justify-between p-4 bg-blue-700 text-white">
+      <div class="flex items-center gap-2">
+        <span class="w-6 h-6 rounded-full bg-white text-blue-700 text-xs flex items-center justify-center font-bold">1</span>
+        <span class="font-medium text-sm">物件情報の読み込み</span>
+      </div>
+      <span class="text-blue-200 text-sm">▲ 開く</span>
+    </div>
+    <div class="p-4">
+      <textarea class="w-full border border-gray-200 rounded p-3 text-sm h-20 resize-none mb-2" placeholder="メール本文をペースト..."></textarea>
+      <button class="px-4 py-2 bg-blue-700 text-white rounded text-sm">AI解析</button>
+    </div>
+  </div>
+
+  <!-- セクション2: 完了状態 -->
+  <div class="bg-white rounded-xl shadow-sm mb-3 overflow-hidden">
+    <div class="flex items-center justify-between p-4 bg-gray-50 border-b">
+      <div class="flex items-center gap-2">
+        <span class="w-6 h-6 rounded-full bg-green-500 text-white text-xs flex items-center justify-center font-bold">✓</span>
+        <span class="font-medium text-sm text-gray-700">物件情報確認</span>
+        <span class="text-xs text-gray-400">東京都豊島区大塚 / 450㎡ / 容積400%</span>
+      </div>
+      <span class="text-gray-400 text-sm">▼ 編集</span>
+    </div>
+  </div>
+
+  <!-- セクション3: 開いている状態 -->
+  <div class="bg-white rounded-xl shadow-sm mb-3 overflow-hidden">
+    <div class="flex items-center justify-between p-4 bg-blue-700 text-white">
+      <div class="flex items-center gap-2">
+        <span class="w-6 h-6 rounded-full bg-white text-blue-700 text-xs flex items-center justify-center font-bold">3</span>
+        <span class="font-medium text-sm">仕入れ条件入力</span>
+      </div>
+      <span class="text-blue-200 text-sm">▲ 開く</span>
+    </div>
+    <div class="p-4 space-y-3">
+      <div class="flex gap-3">
+        <div class="flex-1">
+          <label class="text-xs text-gray-500">仕入れ価格（万円）</label>
+          <input class="w-full border border-gray-200 rounded p-2 text-sm mt-1" placeholder="17,000" />
+        </div>
+        <div class="flex-1">
+          <label class="text-xs text-gray-500">地上げ費（万円）</label>
+          <input class="w-full border border-gray-200 rounded p-2 text-sm mt-1" placeholder="60,000" />
+        </div>
+      </div>
+      <button class="w-full py-2.5 bg-emerald-600 text-white rounded font-medium text-sm">▶ シミュレーション実行</button>
+    </div>
+  </div>
+
+  <!-- セクション4: ロック状態 -->
+  <div class="bg-white rounded-xl shadow-sm mb-3 overflow-hidden opacity-50">
+    <div class="flex items-center justify-between p-4 bg-gray-50">
+      <div class="flex items-center gap-2">
+        <span class="w-6 h-6 rounded-full bg-gray-300 text-white text-xs flex items-center justify-center font-bold">4</span>
+        <span class="font-medium text-sm text-gray-500">シミュレーション結果</span>
+      </div>
+      <span class="text-gray-300 text-sm">🔒</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 案E: モバイルカード型 ========== -->
+<div id="tab-e" class="tab-content max-w-sm mx-auto px-4 py-8">
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <h2 class="text-base font-bold text-gray-800 mb-1">案E: モバイルカード型</h2>
+    <p class="text-xs text-gray-500">スマホ最適化。外出先でも指1本でサクッと判定できる。</p>
+  </div>
+
+  <!-- モバイル風フレーム -->
+  <div class="border-4 border-gray-800 rounded-3xl overflow-hidden shadow-2xl bg-gray-50">
+    <div class="bg-gray-800 text-white text-center text-xs py-1">📱 スマートフォン表示イメージ</div>
+
+    <!-- ヘッダー -->
+    <div class="bg-blue-700 text-white px-4 py-3">
+      <p class="font-bold text-sm">土地判定</p>
+      <p class="text-xs text-blue-200">採算シミュレーター</p>
+    </div>
+
+    <!-- スワイプカード1 -->
+    <div class="p-3">
+      <div class="bg-white rounded-xl shadow p-4 mb-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-600">STEP 1 — 物件情報</span>
+          <span class="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">AI解析</span>
+        </div>
+        <textarea class="w-full border border-gray-100 bg-gray-50 rounded-lg p-2 text-xs h-16 resize-none" placeholder="メール文をペースト..."></textarea>
+        <button class="w-full mt-2 py-2 bg-blue-700 text-white rounded-lg text-sm font-medium">解析する</button>
+      </div>
+
+      <!-- 解析結果カード -->
+      <div class="bg-white rounded-xl shadow p-4 mb-3">
+        <span class="text-xs font-semibold text-gray-600">STEP 2 — 確認</span>
+        <div class="mt-2 space-y-1.5">
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-500">住所</span>
+            <span class="font-medium">豊島区大塚 2-45</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-500">面積</span>
+            <span class="font-medium">450 ㎡（136坪）</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-500">容積率</span>
+            <span class="font-medium">実行 400%</span>
+          </div>
+        </div>
+        <div class="mt-3 flex gap-2">
+          <input class="flex-1 border border-gray-200 rounded p-1.5 text-xs" placeholder="仕入れ（万円）" />
+          <button class="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-medium">計算</button>
+        </div>
+      </div>
+
+      <!-- 結果カード -->
+      <div class="bg-gradient-to-br from-green-600 to-emerald-700 rounded-xl shadow p-4 text-white">
+        <div class="flex justify-between items-start mb-3">
+          <span class="text-xs font-medium text-green-100">シミュレーション結果</span>
+          <span class="text-xs bg-white text-green-700 px-2 py-0.5 rounded-full font-bold">採算OK</span>
+        </div>
+        <p class="text-3xl font-bold mb-1">25.3%</p>
+        <p class="text-xs text-green-200 mb-3">利益率（採算ライン 20%超え）</p>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="bg-white/20 rounded-lg p-2">
+            <p class="text-xs text-green-100">出口総額</p>
+            <p class="font-bold">112億円</p>
+          </div>
+          <div class="bg-white/20 rounded-lg p-2">
+            <p class="text-xs text-green-100">利益額</p>
+            <p class="font-bold">28.4億円</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => {
+    el.classList.remove('active', 'bg-blue-800', 'text-white');
+    el.classList.add('border-gray-300');
+  });
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
