@@ -12,6 +12,7 @@
 | Railway | バックエンドAPI | Hobby プラン | $5/月（約750円） |
 | GitHub | コード管理 | lucluc888ok-max | 無料 |
 | Google (Gemini API) | AI解析APIキー | dnisida1@gmail.com | 従量課金（現状ほぼ無料） |
+| Cloudflare | ドメイン管理（tochi-ai.com取得済み） | dnisida1@gmail.com | ドメイン更新費のみ（年払い） |
 
 ## 不要（解約・放置でOK）
 
@@ -23,8 +24,13 @@
 
 | サービス | 用途 | タイミング |
 |---------|------|-----------|
-| Cloudflare | ドメイン取得（aitochihantei.com） | 近日中 |
 | Stripe | 決済・サブスクリプション管理 | マネタイズ開始時 |
 | Firebase Authentication | ログイン認証 | 認証機能実装時 |
 | Supabase | ユーザー・プラン・利用回数管理DB | 認証機能実装時 |
 | Resend | メール送信（登録確認・パスワードリセット） | 認証機能実装時 |
+
+## ドメイン
+
+| ドメイン | 用途 | 登録先 | 状況 |
+|---------|------|--------|------|
+| tochi-ai.com | 本番サービスURL | Cloudflare | 取得済み・未設定 |
