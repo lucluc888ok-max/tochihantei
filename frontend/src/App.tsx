@@ -94,7 +94,7 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [usageCount, setUsageCount] = useState(0);
-  const [usageLimit] = useState(5);
+  const [usageLimit, setUsageLimit] = useState(5);
   const [limitReached, setLimitReached] = useState(false);
 
   const fetchUsage = async (u: User) => {
@@ -106,7 +106,8 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setUsageCount(data.count);
-        setLimitReached(data.remaining === 0);
+        setUsageLimit(data.limit);
+        setLimitReached(data.remaining === 0 && data.limit !== -1);
       }
     } catch { /* ignore */ }
   };
@@ -467,7 +468,7 @@ export default function App() {
           )}
           {AUTH_ENABLED && user && (
             <span className="text-xs text-[#6B7280]">
-              今月: {usageCount}/{usageLimit}回
+              今月: {usageLimit === -1 ? `${usageCount}回（無制限）` : `${usageCount}/${usageLimit}回`}
             </span>
           )}
           <button
