@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from './firebase';
 import type { User } from './firebase';
-import { Loader } from '@googlemaps/js-api-loader';
+import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '';
 import {
@@ -198,33 +198,54 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!mapData || !mapContainerRef.current || !GOOGLE_MAPS_KEY) return;
+    if (!mapData || !GOOGLE_MAPS_KEY) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
     setMeasuredArea(null);
-    const loader = new Loader({ apiKey: GOOGLE_MAPS_KEY, version: 'weekly', libraries: ['drawing', 'geometry'] });
-    loader.load().then((google) => {
-      if (!mapContainerRef.current) return;
-      const map = new google.maps.Map(mapContainerRef.current, {
-        center: { lat: mapData.lat, lng: mapData.lng },
-        zoom: 18,
-        mapTypeId: 'hybrid',
-      });
-      new google.maps.Marker({ position: { lat: mapData.lat, lng: mapData.lng }, map, title: parsedData?.address });
-      const dm = new (google.maps as any).drawing.DrawingManager({
-        drawingMode: null,
-        drawingControl: true,
-        drawingControlOptions: {
-          position: google.maps.ControlPosition.TOP_CENTER,
-          drawingModes: ['polygon'],
-        },
-        polygonOptions: { fillColor: '#2563EB', fillOpacity: 0.15, strokeColor: '#2563EB', strokeWeight: 2, editable: true },
-      });
-      dm.setMap(map);
-      google.maps.event.addListener(dm, 'polygoncomplete', (polygon: any) => {
-        const area = google.maps.geometry.spherical.computeArea(polygon.getPath());
-        setMeasuredArea(Math.round(area * 10) / 10);
-        dm.setDrawingMode(null);
-      });
-    });
+    container.innerHTML = '';
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setOptions({ apiKey: GOOGLE_MAPS_KEY, version: 'weekly' });
+        await Promise.all([
+          importLibrary('maps'),
+          importLibrary('marker'),
+          importLibrary('drawing'),
+          importLibrary('geometry'),
+        ]);
+        if (cancelled || !mapContainerRef.current) return;
+        const map = new google.maps.Map(mapContainerRef.current, {
+          center: { lat: mapData.lat, lng: mapData.lng },
+          zoom: 18,
+          mapTypeId: 'hybrid',
+        });
+        new google.maps.Marker({ position: { lat: mapData.lat, lng: mapData.lng }, map });
+        try {
+          const dm = new (google.maps as any).drawing.DrawingManager({
+            drawingMode: null,
+            drawingControl: true,
+            drawingControlOptions: {
+              position: google.maps.ControlPosition.TOP_CENTER,
+              drawingModes: ['polygon'],
+            },
+            polygonOptions: { fillColor: '#2563EB', fillOpacity: 0.15, strokeColor: '#2563EB', strokeWeight: 2, editable: true },
+          });
+          dm.setMap(map);
+          google.maps.event.addListener(dm, 'polygoncomplete', (polygon: any) => {
+            const area = google.maps.geometry.spherical.computeArea(polygon.getPath());
+            setMeasuredArea(Math.round(area * 10) / 10);
+            dm.setDrawingMode(null);
+          });
+        } catch (e) {
+          console.warn('Drawing library unavailable:', e);
+        }
+      } catch (e) {
+        console.error('Google Maps load error:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [mapData?.lat, mapData?.lng]);
 
   useEffect(() => {
