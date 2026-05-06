@@ -1,11 +1,62 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from './firebase';
 import type { User } from './firebase';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Leaflet デフォルトアイコンの修正（Vite環境）
+const leafletIcon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+});
+L.Marker.prototype.options.icon = leafletIcon;
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 
 const TSUBO_RATIO = 3.305785;
+
+interface Station { name: string; distance: number; walkingMinutes: number; }
+interface MapData { lat: number; lng: number; stations: Station[]; }
+
+const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const R = 6371000;
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180, Δλ = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
+  try {
+    const res = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`);
+    const data = await res.json();
+    if (data?.length > 0) {
+      const [lng, lat] = data[0].geometry.coordinates;
+      return { lat, lng };
+    }
+    return null;
+  } catch { return null; }
+};
+
+const fetchNearbyStations = async (lat: number, lng: number): Promise<Station[]> => {
+  try {
+    const query = `[out:json][timeout:10];node["railway"="station"](around:1000,${lat},${lng});out body;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query });
+    const data = await res.json();
+    return (data.elements || [])
+      .map((el: any) => {
+        const distance = Math.round(haversineDistance(lat, lng, el.lat, el.lon));
+        return { name: el.tags['name'] || el.tags['name:ja'] || '', distance, walkingMinutes: Math.round(distance / 80) };
+      })
+      .filter((s: Station) => s.name)
+      .sort((a: Station, b: Station) => a.distance - b.distance)
+      .slice(0, 3);
+  } catch { return []; }
+};
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const STORAGE_KEY = 'tochihantei_history';
 
@@ -96,6 +147,8 @@ export default function App() {
   const [usageCount, setUsageCount] = useState(0);
   const [usageLimit, setUsageLimit] = useState(5);
   const [limitReached, setLimitReached] = useState(false);
+  const [mapData, setMapData] = useState<MapData | null>(null);
+  const [isLoadingMap, setIsLoadingMap] = useState(false);
 
   const fetchUsage = async (u: User) => {
     try {
@@ -123,6 +176,19 @@ export default function App() {
       if (u) await fetchUsage(u);
     });
   }, []);
+
+  useEffect(() => {
+    if (!parsedData?.address) { setMapData(null); return; }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsLoadingMap(true);
+      const coords = await geocodeAddress(parsedData.address);
+      if (cancelled || !coords) { setIsLoadingMap(false); return; }
+      const stations = await fetchNearbyStations(coords.lat, coords.lng);
+      if (!cancelled) { setMapData({ ...coords, stations }); setIsLoadingMap(false); }
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [parsedData?.address]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -705,6 +771,53 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* ===== 地図カード ===== */}
+        {parsedData && (
+          <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+            <p className="text-xs font-medium text-[#6B7280] mb-3">📍 物件位置</p>
+            {isLoadingMap ? (
+              <div className="h-[280px] bg-[#F9FAFB] rounded-lg flex items-center justify-center">
+                <p className="text-xs text-[#9CA3AF]">地図を読み込み中...</p>
+              </div>
+            ) : mapData ? (
+              <>
+                <div className="rounded-lg overflow-hidden" style={{ height: '280px' }}>
+                  <MapContainer
+                    key={`${mapData.lat}-${mapData.lng}`}
+                    center={[mapData.lat, mapData.lng]}
+                    zoom={16}
+                    style={{ height: '100%', width: '100%' }}
+                    scrollWheelZoom={false}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+                      url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
+                    />
+                    <Marker position={[mapData.lat, mapData.lng]}>
+                      <Popup>{parsedData.address}</Popup>
+                    </Marker>
+                  </MapContainer>
+                </div>
+                {mapData.stations.length > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    <p className="text-xs font-medium text-[#6B7280] mb-2">最寄り駅</p>
+                    {mapData.stations.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-[#F9FAFB] last:border-0">
+                        <span className="text-[#374151]">🚉 {s.name}</span>
+                        <span className="text-[#6B7280]">徒歩{s.walkingMinutes}分（{s.distance}m）</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-[80px] bg-[#F9FAFB] rounded-lg flex items-center justify-center">
+                <p className="text-xs text-[#9CA3AF]">住所から地図を表示できませんでした</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ===== 結果エリア ===== */}
         {simResult && (
