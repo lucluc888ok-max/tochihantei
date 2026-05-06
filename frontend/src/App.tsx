@@ -1,18 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from './firebase';
 import type { User } from './firebase';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { Loader } from '@googlemaps/js-api-loader';
 
-// Leaflet デフォルトアイコンの修正（Vite環境）
-const leafletIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-});
-L.Marker.prototype.options.icon = leafletIcon;
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
@@ -155,6 +146,8 @@ export default function App() {
   const [limitReached, setLimitReached] = useState(false);
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [isLoadingMap, setIsLoadingMap] = useState(false);
+  const [measuredArea, setMeasuredArea] = useState<number | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
   const [compareList, setCompareList] = useState<CompareItem[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [shareToast, setShareToast] = useState(false);
@@ -203,6 +196,36 @@ export default function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!mapData || !mapContainerRef.current || !GOOGLE_MAPS_KEY) return;
+    setMeasuredArea(null);
+    const loader = new Loader({ apiKey: GOOGLE_MAPS_KEY, version: 'weekly', libraries: ['drawing', 'geometry'] });
+    loader.load().then((google) => {
+      if (!mapContainerRef.current) return;
+      const map = new google.maps.Map(mapContainerRef.current, {
+        center: { lat: mapData.lat, lng: mapData.lng },
+        zoom: 18,
+        mapTypeId: 'hybrid',
+      });
+      new google.maps.Marker({ position: { lat: mapData.lat, lng: mapData.lng }, map, title: parsedData?.address });
+      const dm = new (google.maps as any).drawing.DrawingManager({
+        drawingMode: null,
+        drawingControl: true,
+        drawingControlOptions: {
+          position: google.maps.ControlPosition.TOP_CENTER,
+          drawingModes: ['polygon'],
+        },
+        polygonOptions: { fillColor: '#2563EB', fillOpacity: 0.15, strokeColor: '#2563EB', strokeWeight: 2, editable: true },
+      });
+      dm.setMap(map);
+      google.maps.event.addListener(dm, 'polygoncomplete', (polygon: any) => {
+        const area = google.maps.geometry.spherical.computeArea(polygon.getPath());
+        setMeasuredArea(Math.round(area * 10) / 10);
+        dm.setDrawingMode(null);
+      });
+    });
+  }, [mapData?.lat, mapData?.lng]);
 
   useEffect(() => {
     if (!parsedData?.address) { setMapData(null); return; }
@@ -886,30 +909,44 @@ export default function App() {
         {/* ===== 地図カード ===== */}
         {parsedData && (
           <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
-            <p className="text-xs font-medium text-[#6B7280] mb-3">📍 物件位置</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-[#6B7280]">📍 物件位置</p>
+              <p className="text-xs text-[#9CA3AF]">地図上でポリゴンを描くと面積を測定できます</p>
+            </div>
             {isLoadingMap ? (
-              <div className="h-[280px] bg-[#F9FAFB] rounded-lg flex items-center justify-center">
+              <div className="h-[320px] bg-[#F9FAFB] rounded-lg flex items-center justify-center">
                 <p className="text-xs text-[#9CA3AF]">地図を読み込み中...</p>
               </div>
             ) : mapData ? (
               <>
-                <div className="rounded-lg overflow-hidden" style={{ height: '280px' }}>
-                  <MapContainer
-                    key={`${mapData.lat}-${mapData.lng}`}
-                    center={[mapData.lat, mapData.lng]}
-                    zoom={16}
-                    style={{ height: '100%', width: '100%' }}
-                    scrollWheelZoom={false}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-                      url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
-                    />
-                    <Marker position={[mapData.lat, mapData.lng]}>
-                      <Popup>{parsedData.address}</Popup>
-                    </Marker>
-                  </MapContainer>
-                </div>
+                <div
+                  key={`${mapData.lat}-${mapData.lng}`}
+                  ref={mapContainerRef}
+                  className="rounded-lg overflow-hidden"
+                  style={{ height: '320px' }}
+                />
+                {measuredArea !== null && (
+                  <div className="mt-3 flex items-center justify-between bg-[#EFF6FF] rounded-lg px-4 py-3">
+                    <div>
+                      <p className="text-xs text-[#2563EB] font-medium">測定面積</p>
+                      <p className="text-lg font-semibold text-[#1D4ED8]">
+                        {measuredArea.toLocaleString()} ㎡
+                        <span className="text-xs font-normal text-[#6B7280] ml-2">
+                          （{(measuredArea / 3.305785).toFixed(1)} 坪）
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setParsedData(d => d ? { ...d, area_sqm: measuredArea } : d);
+                        setMeasuredArea(null);
+                      }}
+                      className="text-xs bg-[#2563EB] text-white px-4 py-2 rounded-lg hover:bg-[#1D4ED8] transition-colors"
+                    >
+                      面積欄に反映
+                    </button>
+                  </div>
+                )}
                 {mapData.stations.length > 0 && (
                   <div className="mt-3 space-y-1.5">
                     <p className="text-xs font-medium text-[#6B7280] mb-2">最寄り駅</p>
