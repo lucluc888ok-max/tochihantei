@@ -148,6 +148,8 @@ export default function App() {
   const [isLoadingMap, setIsLoadingMap] = useState(false);
   const [measuredArea, setMeasuredArea] = useState<number | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const drawnPolygonRef = useRef<any>(null);
+  const drawingManagerRef = useRef<any>(null);
   const [compareList, setCompareList] = useState<CompareItem[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [shareToast, setShareToast] = useState(false);
@@ -203,6 +205,8 @@ export default function App() {
     const container = mapContainerRef.current;
     if (!container) return;
     setMeasuredArea(null);
+    drawnPolygonRef.current = null;
+    drawingManagerRef.current = null;
     container.innerHTML = '';
     let cancelled = false;
 
@@ -237,8 +241,11 @@ export default function App() {
             },
             polygonOptions: { fillColor: '#2563EB', fillOpacity: 0.15, strokeColor: '#2563EB', strokeWeight: 2, editable: true },
           });
+          drawingManagerRef.current = dm;
           dm.setMap(map);
           google.maps.event.addListener(dm, 'polygoncomplete', (polygon: any) => {
+            if (drawnPolygonRef.current) drawnPolygonRef.current.setMap(null);
+            drawnPolygonRef.current = polygon;
             const area = google.maps.geometry.spherical.computeArea(polygon.getPath());
             setMeasuredArea(Math.round(area * 10) / 10);
             dm.setDrawingMode(null);
@@ -372,6 +379,15 @@ export default function App() {
         setTimeout(() => setShareToast(false), 3000);
       }
     } catch { /* ignore */ }
+  };
+
+  const clearPolygon = () => {
+    if (drawnPolygonRef.current) {
+      drawnPolygonRef.current.setMap(null);
+      drawnPolygonRef.current = null;
+    }
+    setMeasuredArea(null);
+    if (drawingManagerRef.current) drawingManagerRef.current.setDrawingMode('polygon');
   };
 
   const addToCompare = () => {
@@ -963,15 +979,27 @@ export default function App() {
                         </span>
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        setParsedData(d => d ? { ...d, area_sqm: measuredArea } : d);
-                        setMeasuredArea(null);
-                      }}
-                      className="text-xs bg-[#2563EB] text-white px-4 py-2 rounded-lg hover:bg-[#1D4ED8] transition-colors"
-                    >
-                      面積欄に反映
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={clearPolygon}
+                        className="text-xs bg-[#F3F4F6] text-[#374151] px-3 py-2 rounded-lg hover:bg-[#E5E7EB] transition-colors"
+                      >
+                        クリア
+                      </button>
+                      <button
+                        onClick={() => {
+                          setParsedData(d => d ? { ...d, area_sqm: measuredArea } : d);
+                          setMeasuredArea(null);
+                          if (drawnPolygonRef.current) {
+                            drawnPolygonRef.current.setMap(null);
+                            drawnPolygonRef.current = null;
+                          }
+                        }}
+                        className="text-xs bg-[#2563EB] text-white px-4 py-2 rounded-lg hover:bg-[#1D4ED8] transition-colors"
+                      >
+                        面積欄に反映
+                      </button>
+                    </div>
                   </div>
                 )}
                 {mapData.stations.length > 0 && (
