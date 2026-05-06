@@ -430,7 +430,7 @@ export default function App() {
                 <input
                   type="email" required value={loginEmail}
                   onChange={e => setLoginEmail(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   placeholder="example@email.com"
                 />
               </div>
@@ -439,7 +439,7 @@ export default function App() {
                 <input
                   type="password" required value={loginPassword}
                   onChange={e => setLoginPassword(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   placeholder={isRegisterMode ? '6文字以上' : ''}
                 />
               </div>
