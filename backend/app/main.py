@@ -9,9 +9,16 @@ app = FastAPI(title="Land Purchase Simulator API")
 
 app.include_router(simulator.router, prefix="/api", tags=["Simulator"])
 
+ALLOWED_ORIGINS = [
+    "https://tochi-ai.com",
+    "https://www.tochi-ai.com",
+    "https://tochihantei.vercel.app",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
