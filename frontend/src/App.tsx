@@ -165,6 +165,7 @@ export default function App() {
   const [rentalUnitSqm, setRentalUnitSqm] = useState(35);
   const [occupancyRate, setOccupancyRate] = useState(95);
   const [targetYield, setTargetYield] = useState(5.0);
+  const [rentalPriceInput, setRentalPriceInput] = useState('');
   // 詳細設定パラメータ
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advConstructionCost, setAdvConstructionCost] = useState(160);
@@ -275,6 +276,11 @@ export default function App() {
 
     return () => { cancelled = true; };
   }, [mapData?.lat, mapData?.lng]);
+
+  useEffect(() => {
+    const rp = simResult?.estimated_rental_price_per_tsubo;
+    if (rp && rp > 0) setRentalPriceInput(Math.round(rp).toString());
+  }, [simResult?.estimated_rental_price_per_tsubo]);
 
   useEffect(() => {
     if (!parsedData?.address) { setMapData(null); return; }
@@ -1452,7 +1458,8 @@ export default function App() {
 
             {/* ===== 賃貸利回りコンテンツ ===== */}
             {simMode === 'rental' && (() => {
-              const rp = simResult.estimated_rental_price_per_tsubo ?? 0;
+              const backendRp = simResult.estimated_rental_price_per_tsubo ?? 0;
+              const rp = parseFloat(rentalPriceInput) || backendRp;
               const unitTsubo = rentalUnitSqm / TSUBO_RATIO;
               const rooms = Math.floor(simResult.net_area_sqm / rentalUnitSqm);
               const monthlyPerRoom = unitTsubo * rp;
@@ -1473,8 +1480,13 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs text-[#6B7280] block mb-1">賃料坪単価（円/坪）</label>
-                        <p className="text-xs text-[#9CA3AF] mb-1">推定値（新築・エリア補正済）: {fmt(rp)}円/坪</p>
-                        <p className="text-xs text-[#9CA3AF]">キャップレート: {((simResult.rental_cap_rate ?? 0) * 100).toFixed(1)}%</p>
+                        <input type="number" value={rentalPriceInput} onChange={e => setRentalPriceInput(e.target.value)}
+                          placeholder={backendRp > 0 ? Math.round(backendRp).toString() : '例: 15000'}
+                          className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                        {backendRp > 0
+                          ? <p className="text-xs text-[#9CA3AF] mt-0.5">推定値（新築キャップ{((simResult.rental_cap_rate ?? 0) * 100).toFixed(1)}%）: {fmt(backendRp)}円/坪</p>
+                          : <p className="text-xs text-amber-500 mt-0.5">シミュレーションを再実行すると自動推定されます</p>
+                        }
                       </div>
                       <div>
                         <label className="text-xs text-[#6B7280] block mb-1">1戸あたり面積（㎡）</label>
@@ -1496,6 +1508,11 @@ export default function App() {
                   {/* 計算結果 */}
                   <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
                     <p className="text-xs font-medium text-[#374151] mb-4 pb-3 border-b border-[#F3F4F6]">賃貸利回り試算</p>
+                    {rp <= 0 && (
+                      <p className="text-xs text-amber-600 bg-amber-50 rounded px-3 py-2 mb-3">
+                        賃料坪単価を入力するか、シミュレーションを再実行してください
+                      </p>
+                    )}
                     {[
                       { label: '想定部屋数', value: `${rooms}戸`, note: `有効専有${simResult.net_area_sqm.toFixed(0)}㎡ ÷ 1戸${rentalUnitSqm}㎡` },
                       { label: '月額賃料/戸', value: `${fmt(monthlyPerRoom)}円`, note: `${rentalUnitSqm / TSUBO_RATIO * 1000 | 0}坪 × ${fmt(rp)}円/坪` },
