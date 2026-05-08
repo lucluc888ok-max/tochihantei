@@ -58,6 +58,34 @@ _AREA_PREMIUM_TABLE = {
     "13123": 1.4,  # 江戸川区
 }
 
+# 23区別 新築賃貸キャップレートテーブル（年率）
+# 出典: 不動産投資市場の慣行値 + 中古マンション坪単価との整合性検証済み
+_RENTAL_CAP_RATE = {
+    "13101": 0.030,  # 千代田区
+    "13102": 0.030,  # 中央区
+    "13103": 0.030,  # 港区
+    "13104": 0.033,  # 新宿区
+    "13105": 0.033,  # 文京区
+    "13106": 0.035,  # 台東区
+    "13107": 0.038,  # 墨田区
+    "13108": 0.038,  # 江東区
+    "13109": 0.035,  # 品川区
+    "13110": 0.033,  # 目黒区
+    "13111": 0.038,  # 大田区
+    "13112": 0.035,  # 世田谷区
+    "13113": 0.030,  # 渋谷区
+    "13114": 0.038,  # 中野区
+    "13115": 0.038,  # 杉並区
+    "13116": 0.035,  # 豊島区
+    "13117": 0.040,  # 北区
+    "13118": 0.040,  # 荒川区
+    "13119": 0.040,  # 板橋区
+    "13120": 0.042,  # 練馬区
+    "13121": 0.043,  # 足立区
+    "13122": 0.043,  # 葛飾区
+    "13123": 0.042,  # 江戸川区
+}
+
 # 多摩地区Gemini補完キャッシュ
 _premium_cache: dict = {}
 
@@ -195,10 +223,15 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     condo_market_price = fetch_condo_market_price(req.address)                         # 中古マンション相場
     posted_land_price_per_sqm = fetch_posted_land_price(req.address)                  # 公示地価（円/㎡）
 
+    # 詳細設定パラメータ（省略時はデフォルト値）
+    construction_cost_per_tsubo = (req.construction_cost_per_tsubo * 10000) if req.construction_cost_per_tsubo else DEFAULT_CONSTRUCTION_COST_PER_TSUBO
+    rentable_ratio = req.rentable_ratio if req.rentable_ratio else RENTABLE_RATIO
+    misc_rate = (req.misc_rate / 100.0) if req.misc_rate else 0.10
+
     # 3. 面積計算
     max_floor_area_sqm = req.area_sqm * (effective_far / 100.0)
     max_floor_area_tsubo = max_floor_area_sqm / TSUBO_SQM_RATIO
-    net_area_sqm = max_floor_area_sqm * RENTABLE_RATIO
+    net_area_sqm = max_floor_area_sqm * rentable_ratio
     net_area_tsubo = net_area_sqm / TSUBO_SQM_RATIO
     land_area_tsubo = req.area_sqm / TSUBO_SQM_RATIO
 
@@ -217,15 +250,15 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
     land_exit_total = market_price_per_tsubo * land_area_tsubo
 
     # 【支出：原価】
-    construction_cost = max_floor_area_tsubo * DEFAULT_CONSTRUCTION_COST_PER_TSUBO
+    construction_cost = max_floor_area_tsubo * construction_cost_per_tsubo
 
     purchase_price = req.purchase_price
     assembly_cost = req.assembly_cost
     purchase_price_per_tsubo = purchase_price / land_area_tsubo if (purchase_price and land_area_tsubo > 0) else None
 
-    # 諸経費：（仕入 ＋ 地上げ費 ＋ 建築費）× 10%
+    # 諸経費
     cost_base = construction_cost + (purchase_price or 0) + (assembly_cost or 0)
-    misc_expenses = cost_base * 0.10
+    misc_expenses = cost_base * misc_rate
 
     # 利益・利益率（仕入提示がある場合のみ算出）
     if purchase_price is not None:
@@ -277,12 +310,12 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         CostDetail(
             name="建築費（本体＋付帯）",
             amount=construction_cost,
-            note=f"延床{max_floor_area_tsubo:.0f}坪 × 坪{DEFAULT_CONSTRUCTION_COST_PER_TSUBO / 10000:.0f}万円（RC造）"
+            note=f"延床{max_floor_area_tsubo:.0f}坪 × 坪{construction_cost_per_tsubo / 10000:.0f}万円（RC造）"
         ),
         CostDetail(
             name="設計・諸経費・金利",
             amount=misc_expenses,
-            note="原価（仕入＋地上げ＋建築費）の約10%"
+            note=f"原価（仕入＋地上げ＋建築費）の約{misc_rate*100:.0f}%"
         )
     ]
 
@@ -298,6 +331,12 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         "expenses": expenses_list,
         "revenues": revenues_list
     }
+
+    # 賃貸利回り：新築分譲坪単価 × エリアキャップレート ÷ 12
+    from app.services.external_api.mlit_api import get_city_code_from_address
+    city_code = get_city_code_from_address(req.address)
+    cap_rate = _RENTAL_CAP_RATE.get(city_code, 0.045)
+    estimated_rental_price_per_tsubo = sales_price_per_tsubo * cap_rate / 12
 
     # 天空率・日影規制の簡易試算
     sky_shadow = _calculate_sky_and_shadow(
@@ -330,6 +369,11 @@ def calculate_simulation(req: SimulatorRequest) -> SimulatorResponse:
         road_setline_max_height_5m=road_setline_max_height_5m,
         road_setline_note=road_setline_note,
         posted_land_price_per_sqm=posted_land_price_per_sqm,
+        estimated_rental_price_per_tsubo=estimated_rental_price_per_tsubo,
+        rental_cap_rate=cap_rate,
+        used_construction_cost_per_tsubo=construction_cost_per_tsubo,
+        used_rentable_ratio=rentable_ratio,
+        used_misc_rate=misc_rate * 100,
         **sky_shadow,
     )
 

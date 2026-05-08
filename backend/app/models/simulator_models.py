@@ -7,8 +7,12 @@ class SimulatorRequest(BaseModel):
     road_width: float
     zoning: str
     far_limit: float
-    purchase_price: Optional[float] = None    # デベロッパー提示の仕入価格（円）。未提示なら空欄
-    assembly_cost: Optional[float] = None    # 地上げ費（円）。未提示なら空欄
+    purchase_price: Optional[float] = None    # デベロッパー提示の仕入価格（円）
+    assembly_cost: Optional[float] = None     # 地上げ費（円）
+    # 詳細設定（省略時はデフォルト値を使用）
+    construction_cost_per_tsubo: Optional[float] = None  # 万円/坪
+    rentable_ratio: Optional[float] = None               # 例: 0.82
+    misc_rate: Optional[float] = None                    # 例: 10.0 → 10%
 
 class CostDetail(BaseModel):
     name: str
@@ -47,3 +51,10 @@ class SimulatorResponse(BaseModel):
     shadow_max_length_m: float = 0.0
     shadow_is_regulated: bool = False
     shadow_note: str = ""
+    # 賃貸利回りシミュレーション用
+    estimated_rental_price_per_tsubo: float = 0.0  # 推定月額賃料坪単価（円/坪）
+    rental_cap_rate: float = 0.0                    # 使用したキャップレート
+    # 使用パラメータ（詳細設定の反映確認用）
+    used_construction_cost_per_tsubo: float = 0.0
+    used_rentable_ratio: float = 0.0
+    used_misc_rate: float = 0.0

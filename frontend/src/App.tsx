@@ -115,6 +115,11 @@ interface SimResult {
   shadow_max_length_m?: number;
   shadow_is_regulated?: boolean;
   shadow_note?: string;
+  estimated_rental_price_per_tsubo?: number;
+  rental_cap_rate?: number;
+  used_construction_cost_per_tsubo?: number;
+  used_rentable_ratio?: number;
+  used_misc_rate?: number;
 }
 
 export default function App() {
@@ -155,6 +160,16 @@ export default function App() {
   const [shareToast, setShareToast] = useState(false);
   const [mapRetryKey, setMapRetryKey] = useState(0);
   const resultRef2 = useRef<HTMLDivElement>(null);
+  const [simMode, setSimMode] = useState<'condo' | 'rental' | 'land'>('condo');
+  // 賃貸パラメータ
+  const [rentalUnitSqm, setRentalUnitSqm] = useState(35);
+  const [occupancyRate, setOccupancyRate] = useState(95);
+  const [targetYield, setTargetYield] = useState(5.0);
+  // 詳細設定パラメータ
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advConstructionCost, setAdvConstructionCost] = useState(160);
+  const [advRentableRatio, setAdvRentableRatio] = useState(0.82);
+  const [advMiscRate, setAdvMiscRate] = useState(10);
 
   const fetchUsage = async (u: User) => {
     try {
@@ -448,7 +463,10 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const runSimulation = useCallback(async (parsed: ParsedData, rw: string, pp: string, ac: string) => {
+  const runSimulation = useCallback(async (
+    parsed: ParsedData, rw: string, pp: string, ac: string,
+    advParams?: { constructionCost: number; rentableRatio: number; miscRate: number }
+  ) => {
     const payload: Record<string, unknown> = {
       address: parsed.address,
       area_sqm: parsed.area_sqm,
@@ -460,6 +478,11 @@ export default function App() {
     if (pp.trim() && !isNaN(ppNum) && ppNum > 0) payload.purchase_price = ppNum;
     const acNum = parseFloat(ac) * 10000;
     if (ac.trim() && !isNaN(acNum) && acNum > 0) payload.assembly_cost = acNum;
+    if (advParams) {
+      payload.construction_cost_per_tsubo = advParams.constructionCost;
+      payload.rentable_ratio = advParams.rentableRatio;
+      payload.misc_rate = advParams.miscRate;
+    }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (AUTH_ENABLED && auth?.currentUser) {
@@ -601,7 +624,8 @@ export default function App() {
     if (!parsedData) return;
     setIsSimulating(true);
     try {
-      const result = await runSimulation(parsedData, roadWidth, purchasePriceInput, assemblyCostInput);
+      const result = await runSimulation(parsedData, roadWidth, purchasePriceInput, assemblyCostInput,
+        { constructionCost: advConstructionCost, rentableRatio: advRentableRatio, miscRate: advMiscRate });
       setSimResult(result);
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
@@ -934,6 +958,38 @@ export default function App() {
             </div>
           </div>
 
+          {/* 詳細設定パネル */}
+          <div className="mt-4">
+            <button
+              onClick={() => setShowAdvanced(v => !v)}
+              className="text-xs text-[#6B7280] hover:text-[#374151] flex items-center gap-1 transition-colors"
+            >
+              <span>{showAdvanced ? '▲' : '▼'}</span> 詳細設定（建築費・レンタブル比・諸経費率）
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 p-4 bg-[#F9FAFB] rounded-lg grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs text-[#6B7280] block mb-1">建築費単価（万円/坪）</label>
+                  <input type="number" value={advConstructionCost} onChange={e => setAdvConstructionCost(Number(e.target.value))}
+                    className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">デフォルト: 160</p>
+                </div>
+                <div>
+                  <label className="text-xs text-[#6B7280] block mb-1">レンタブル比</label>
+                  <input type="number" step="0.01" value={advRentableRatio} onChange={e => setAdvRentableRatio(Number(e.target.value))}
+                    className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">デフォルト: 0.82</p>
+                </div>
+                <div>
+                  <label className="text-xs text-[#6B7280] block mb-1">諸経費率（%）</label>
+                  <input type="number" value={advMiscRate} onChange={e => setAdvMiscRate(Number(e.target.value))}
+                    className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">デフォルト: 10</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* シミュレーション実行ボタン */}
           <div className="mt-6 pt-5 border-t border-[#F3F4F6]">
             <button
@@ -1085,7 +1141,22 @@ export default function App() {
           <div ref={resultRef} className="space-y-4">
           <div ref={resultRef2}>
 
-            {/* HERO */}
+            {/* シミュレーションモード タブ */}
+            <div className="bg-white rounded-xl border border-[#E5E7EB] p-1 flex">
+              {[
+                { mode: 'condo' as const, label: '分譲（売却）' },
+                { mode: 'rental' as const, label: '賃貸（利回り）' },
+                { mode: 'land' as const, label: '更地（転売）' },
+              ].map(({ mode, label }) => (
+                <button key={mode} onClick={() => setSimMode(mode)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${simMode === mode ? 'bg-[#2563EB] text-white' : 'text-[#6B7280] hover:text-[#374151]'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* ===== 分譲コンテンツ ===== */}
+            {simMode === 'condo' && (<>
             <div className="bg-white rounded-xl border border-[#E5E7EB] p-8 text-center">
               <p className="text-xs text-[#6B7280] mb-2 tracking-widest">想 定 出 口 総 額</p>
               <div>
@@ -1349,7 +1420,7 @@ export default function App() {
             )}
 
             {/* 仕入価格変動チャート */}
-            {chartData.length > 0 && (
+            {chartData.length > 0 && simMode === 'condo' && (
               <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
                 <p className="text-xs font-medium text-[#374151] mb-4">仕入価格変動による純利益シミュレーション</p>
                 <div style={{ height: '200px' }}>
@@ -1376,6 +1447,151 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            </>)}
+
+            {/* ===== 賃貸利回りコンテンツ ===== */}
+            {simMode === 'rental' && (() => {
+              const rp = simResult.estimated_rental_price_per_tsubo ?? 0;
+              const unitTsubo = rentalUnitSqm / TSUBO_RATIO;
+              const rooms = Math.floor(simResult.net_area_sqm / rentalUnitSqm);
+              const monthlyPerRoom = unitTsubo * rp;
+              const monthlyTotal = rooms * monthlyPerRoom;
+              const annualRent = monthlyTotal * 12 * (occupancyRate / 100);
+              const constCost = simResult.report_data.expenses.find(e => e.name.includes('建築費'))?.amount ?? 0;
+              const miscCost = simResult.report_data.expenses.find(e => e.name.includes('諸経費'))?.amount ?? 0;
+              const ppNum = parseFloat(purchasePriceInput) * 10000;
+              const hasPrice = purchasePriceInput.trim() && !isNaN(ppNum) && ppNum > 0;
+              const totalInvestment = (hasPrice ? ppNum : 0) + constCost + miscCost;
+              const grossYield = hasPrice && totalInvestment > 0 ? (annualRent / totalInvestment) * 100 : null;
+              const maxPurchase = (annualRent / (targetYield / 100)) - constCost - miscCost;
+              return (
+                <div className="space-y-4">
+                  {/* パラメータ設定 */}
+                  <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                    <p className="text-xs font-medium text-[#374151] mb-4 pb-3 border-b border-[#F3F4F6]">賃貸シミュレーション設定</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-[#6B7280] block mb-1">賃料坪単価（円/坪）</label>
+                        <p className="text-xs text-[#9CA3AF] mb-1">推定値（新築・エリア補正済）: {fmt(rp)}円/坪</p>
+                        <p className="text-xs text-[#9CA3AF]">キャップレート: {((simResult.rental_cap_rate ?? 0) * 100).toFixed(1)}%</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-[#6B7280] block mb-1">1戸あたり面積（㎡）</label>
+                        <input type="number" value={rentalUnitSqm} onChange={e => setRentalUnitSqm(Number(e.target.value))}
+                          className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-[#6B7280] block mb-1">稼働率（%）</label>
+                        <input type="number" value={occupancyRate} onChange={e => setOccupancyRate(Number(e.target.value))}
+                          className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-[#6B7280] block mb-1">目標利回り（%）</label>
+                        <input type="number" step="0.1" value={targetYield} onChange={e => setTargetYield(Number(e.target.value))}
+                          className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                    </div>
+                  </div>
+                  {/* 計算結果 */}
+                  <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                    <p className="text-xs font-medium text-[#374151] mb-4 pb-3 border-b border-[#F3F4F6]">賃貸利回り試算</p>
+                    {[
+                      { label: '想定部屋数', value: `${rooms}戸`, note: `有効専有${simResult.net_area_sqm.toFixed(0)}㎡ ÷ 1戸${rentalUnitSqm}㎡` },
+                      { label: '月額賃料/戸', value: `${fmt(monthlyPerRoom)}円`, note: `${rentalUnitSqm / TSUBO_RATIO * 1000 | 0}坪 × ${fmt(rp)}円/坪` },
+                      { label: '月間賃料合計', value: `${fmt(monthlyTotal)}円`, note: `${rooms}戸合計` },
+                      { label: '年間賃料収入', value: `${fmt(annualRent / 10000)}万円`, note: `稼働率${occupancyRate}%込み` },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                        <div>
+                          <span className="text-sm text-[#6B7280]">{row.label}</span>
+                          <p className="text-xs text-[#D1D5DB]">{row.note}</p>
+                        </div>
+                        <span className="text-sm font-medium text-[#111827]">{row.value}</span>
+                      </div>
+                    ))}
+                    {grossYield !== null && (
+                      <div className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                        <span className="text-sm text-[#6B7280]">表面利回り</span>
+                        <span className={`text-lg font-semibold ${grossYield >= targetYield ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                          {grossYield.toFixed(2)}%
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-3 p-3 bg-[#EFF6FF] rounded-lg flex justify-between items-center">
+                      <div>
+                        <p className="text-xs text-[#2563EB] font-medium">目標利回り{targetYield}%達成の上限仕入れ価格</p>
+                        <p className="text-xs text-[#6B7280]">建築費・諸経費控除後</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-semibold text-[#1D4ED8]">{maxPurchase > 0 ? `${fmt(maxPurchase / 10000)}万円` : '－'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ===== 更地転売コンテンツ ===== */}
+            {simMode === 'land' && (() => {
+              const landAreaTsubo = (parsedData?.area_sqm ?? 0) / TSUBO_RATIO;
+              const exitPerTsubo = simResult.market_price_per_tsubo;
+              const exitTotal = exitPerTsubo * landAreaTsubo;
+              const ppNum = parseFloat(purchasePriceInput) * 10000;
+              const hasPrice = purchasePriceInput.trim() && !isNaN(ppNum) && ppNum > 0;
+              const buyFees = hasPrice ? ppNum * 0.04 + 60000 : 0;
+              const sellFees = exitTotal * 0.03 + 60000;
+              const grossProfit = hasPrice ? exitTotal - ppNum - buyFees - sellFees : null;
+              const profitRate = (grossProfit !== null && (ppNum + buyFees) > 0) ? grossProfit / (ppNum + buyFees) * 100 : null;
+              return (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                    <p className="text-xs font-medium text-[#374151] mb-4 pb-3 border-b border-[#F3F4F6]">更地転売試算</p>
+                    {[
+                      { label: '土地面積', value: `${landAreaTsubo.toFixed(1)}坪`, note: `${parsedData?.area_sqm.toFixed(1)}㎡` },
+                      { label: '売却想定坪単価', value: `${fmt(exitPerTsubo / 10000)}万円/坪`, note: 'MLIT宅地相場（補正込み）' },
+                      { label: '売却想定総額', value: `${fmt(exitTotal / 10000)}万円`, note: '' },
+                      { label: '売却側諸費用', value: `-${fmt(sellFees / 10000)}万円`, note: '仲介3%+6万円' },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                        <div>
+                          <span className="text-sm text-[#6B7280]">{row.label}</span>
+                          {row.note && <p className="text-xs text-[#D1D5DB]">{row.note}</p>}
+                        </div>
+                        <span className="text-sm font-medium text-[#111827]">{row.value}</span>
+                      </div>
+                    ))}
+                    {hasPrice ? (
+                      <>
+                        {[
+                          { label: '仕入れ総額', value: `-${fmt(ppNum / 10000)}万円` },
+                          { label: '仕入れ諸費用', value: `-${fmt(buyFees / 10000)}万円`, note: '仲介3%+登記1%+6万円' },
+                        ].map(row => (
+                          <div key={row.label} className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                            <div>
+                              <span className="text-sm text-[#6B7280]">{row.label}</span>
+                              {'note' in row && row.note && <p className="text-xs text-[#D1D5DB]">{row.note}</p>}
+                            </div>
+                            <span className="text-sm font-medium text-[#111827]">{row.value}</span>
+                          </div>
+                        ))}
+                        <div className={`mt-3 p-3 rounded-lg flex justify-between items-center ${grossProfit !== null && grossProfit >= 0 ? 'bg-[#F0FDF4]' : 'bg-[#FEF2F2]'}`}>
+                          <div>
+                            <p className={`text-xs font-medium ${grossProfit !== null && grossProfit >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>粗利</p>
+                            {profitRate !== null && <p className="text-xs text-[#6B7280]">利益率 {profitRate.toFixed(1)}%</p>}
+                          </div>
+                          <span className={`text-xl font-semibold ${grossProfit !== null && grossProfit >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                            {grossProfit !== null ? `${fmt(grossProfit / 10000)}万円` : '－'}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-[#9CA3AF] text-center py-4">仕入れ価格を入力すると粗利を計算します</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
           </div>
