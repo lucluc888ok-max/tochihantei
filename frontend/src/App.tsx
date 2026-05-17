@@ -1147,6 +1147,96 @@ export default function App() {
           <div ref={resultRef} className="space-y-4">
           <div ref={resultRef2}>
 
+            {/* ===== 出口戦略サマリー ===== */}
+            {(() => {
+              const condoProfit = simResult.profit_total;
+              const condoProfitRate = simResult.profit_margin;
+
+              const backendRp = simResult.estimated_rental_price_per_tsubo ?? 0;
+              const rp = parseFloat(rentalPriceInput) || backendRp;
+              const unitTsubo = rentalUnitSqm / TSUBO_RATIO;
+              const rooms = Math.floor(simResult.net_area_sqm / rentalUnitSqm);
+              const annualRent = rooms * unitTsubo * rp * 12 * (occupancyRate / 100);
+              const constCost = simResult.report_data.expenses.find(e => e.name.includes('建築費'))?.amount ?? 0;
+              const miscCost = simResult.report_data.expenses.find(e => e.name.includes('諸経費'))?.amount ?? 0;
+              const ppNum = parseFloat(purchasePriceInput) * 10000;
+              const hasPrice = purchasePriceInput.trim() !== '' && !isNaN(ppNum) && ppNum > 0;
+              const acNum = parseFloat(assemblyCostInput) * 10000;
+              const hasAssembly = assemblyCostInput.trim() !== '' && !isNaN(acNum) && acNum > 0;
+              const totalInvestment = (hasPrice ? ppNum : 0) + (hasAssembly ? acNum : 0) + constCost + miscCost;
+              const exitSalePrice = annualRent > 0 ? annualRent / (targetYield / 100) : 0;
+              const rentalDevProfit = (hasPrice && rp > 0) ? exitSalePrice - totalInvestment - (exitSalePrice * 0.03 + 60000) : null;
+              const rentalDevProfitRate = (rentalDevProfit !== null && totalInvestment > 0) ? rentalDevProfit / totalInvestment * 100 : null;
+
+              const landAreaTsubo = (parsedData?.area_sqm ?? 0) / TSUBO_RATIO;
+              const landExitTotal = simResult.market_price_per_tsubo * landAreaTsubo;
+              const totalPurchase = (hasPrice ? ppNum : 0) + (hasAssembly ? acNum : 0);
+              const landBuyFees = totalPurchase > 0 ? totalPurchase * 0.04 + 60000 : 0;
+              const landSellFees = landExitTotal * 0.03 + 60000;
+              const landProfit = (hasPrice || hasAssembly) ? landExitTotal - totalPurchase - landBuyFees - landSellFees : null;
+              const landProfitRate = (landProfit !== null && (totalPurchase + landBuyFees) > 0) ? landProfit / (totalPurchase + landBuyFees) * 100 : null;
+
+              const rates = ([
+                { key: 'condo', rate: condoProfitRate },
+                { key: 'rental', rate: rentalDevProfitRate },
+                { key: 'land', rate: landProfitRate },
+              ] as { key: string; rate: number | null }[]).filter(r => r.rate !== null) as { key: string; rate: number }[];
+              const bestKey = rates.length > 0 ? rates.reduce((a, b) => a.rate > b.rate ? a : b).key : null;
+
+              const cards: { key: string; mode: 'condo' | 'rental' | 'land'; label: string; profit: number | null; profitRate: number | null; emptyNote: string }[] = [
+                { key: 'condo', mode: 'condo', label: '分譲（売却）', profit: condoProfit, profitRate: condoProfitRate, emptyNote: '仕入価格を入力' },
+                { key: 'rental', mode: 'rental', label: '賃貸（Exit）', profit: rentalDevProfit, profitRate: rentalDevProfitRate, emptyNote: hasPrice ? '再実行で賃料推定' : '仕入価格を入力' },
+                { key: 'land', mode: 'land', label: '更地（転売）', profit: landProfit, profitRate: landProfitRate, emptyNote: '仕入価格を入力' },
+              ];
+
+              return (
+                <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                  <p className="text-xs font-medium text-[#374151] mb-4">出口戦略サマリー</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {cards.map(card => {
+                      const isBest = card.key === bestKey;
+                      const isPositive = card.profit !== null && card.profit >= 0;
+                      return (
+                        <button
+                          key={card.key}
+                          onClick={() => setSimMode(card.mode)}
+                          className={`rounded-xl p-4 text-left transition-all border-2 ${
+                            isBest ? 'border-[#2563EB] bg-[#EFF6FF]'
+                            : simMode === card.mode ? 'border-[#E5E7EB] bg-[#F9FAFB]'
+                            : 'border-transparent bg-[#F9FAFB] hover:bg-[#F3F4F6]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-[#6B7280]">{card.label}</span>
+                            {isBest && <span className="text-xs bg-[#2563EB] text-white px-1.5 py-0.5 rounded-full">最有力</span>}
+                          </div>
+                          {card.profit !== null ? (
+                            <>
+                              <p className={`text-xl font-semibold ${isPositive ? 'text-[#111827]' : 'text-[#DC2626]'}`}>
+                                {fmt(card.profit / 10000)}万円
+                              </p>
+                              {card.profitRate !== null && (
+                                <p className={`text-xs mt-1 font-medium ${
+                                  card.profitRate >= 25 ? 'text-[#15803D]'
+                                  : card.profitRate >= 10 ? 'text-[#92400E]'
+                                  : 'text-[#DC2626]'
+                                }`}>
+                                  利益率 {card.profitRate.toFixed(1)}%
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-xs text-[#9CA3AF] mt-2">{card.emptyNote}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-[#9CA3AF] mt-3">※ カードをクリックすると各タブに切り替わります。賃貸Exitは投資家売却時の開発利益。</p>
+                </div>
+              );
+            })()}
+
             {/* シミュレーションモード タブ */}
             <div className="bg-white rounded-xl border border-[#E5E7EB] p-1 flex">
               {[
