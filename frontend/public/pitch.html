@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>土地判定 - 用地仕入れ収益シミュレーター ご提案資料</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: #f1f5f9;
+            display: flex;
+            flex-direction: column;
+            gap: 50px;
+            margin: 0;
+            padding: 50px 0;
+            align-items: center;
+            min-width: 1340px;
+        }
+
+        .slide-container {
+            background-color: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            height: 720px;
+            justify-content: center;
+            overflow: hidden;
+            padding: 65px 80px;
+            position: relative;
+            width: 1280px;
+            color: #0f172a;
+        }
+
+        .slide-container::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 8px;
+            background: #1e3a8a;
+            z-index: 1;
+        }
+
+        /* スライド番号 */
+        .slide-num {
+            position: absolute;
+            bottom: 24px;
+            right: 36px;
+            font-size: 13px;
+            color: #94a3b8;
+            font-family: 'Inter', sans-serif;
+        }
+
+        h1, h2, h3 { margin: 0; font-weight: 700; color: #0f172a; }
+        h1 { font-size: 52px; line-height: 1.3; margin-bottom: 24px; letter-spacing: -0.5px; }
+        h1 span { color: #1e3a8a; border-bottom: 4px solid #3b82f6; }
+
+        .slide-title {
+            font-size: 38px;
+            margin-bottom: 40px;
+            width: 100%;
+            border-left: 8px solid #1e3a8a;
+            padding-left: 20px;
+            line-height: 1.2;
+            color: #1e3a8a;
+        }
+
+        p, li { font-size: 21px; line-height: 1.75; color: #334155; margin: 0; }
+
+        .subtitle {
+            font-size: 22px;
+            color: #2563eb;
+            margin-bottom: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .title-layout { text-align: left; width: 100%; padding-left: 20px; }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .two-column.tiled > div {
+            background: #f8fafc;
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            border-top: 5px solid #1e3a8a;
+            height: 100%;
+        }
+
+        .two-column.tiled h3 { color: #1e3a8a; font-size: 26px; margin-bottom: 16px; }
+
+        .tiled-content {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+            width: 100%;
+        }
+
+        .tile {
+            background: #f8fafc;
+            padding: 36px 30px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            border-top: 4px solid #1e3a8a;
+        }
+
+        .tile .icon { font-size: 38px; color: #1e3a8a; margin-bottom: 18px; }
+        .tile h3 { font-size: 22px; margin-bottom: 12px; color: #0f172a; }
+        .tile p { font-size: 18px; }
+
+        /* Bleed Image */
+        .slide-container.bleed-image-layout {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            padding: 0;
+            align-items: start;
+        }
+        .bleed-image-layout .content-container { padding: 65px 60px 65px 80px; }
+        .bleed-image-layout img.bleed-image-side {
+            width: 100%; height: 720px; object-fit: cover;
+        }
+
+        /* Table */
+        .table-layout table { width: 100%; border-collapse: collapse; font-size: 20px; }
+        .table-layout th, .table-layout td { padding: 20px 22px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+        .table-layout th { color: #1e3a8a; font-weight: 700; background: #f1f5f9; }
+        .table-layout td strong { color: #1d4ed8; }
+        .table-layout tr:last-child td { border-bottom: none; }
+
+        /* Numbers highlight */
+        .highlight-numbers-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 40px;
+            align-items: center;
+        }
+        .number-box {
+            background: #f1f5f9;
+            padding: 40px;
+            border-radius: 16px;
+            text-align: center;
+            border: 1px solid #cbd5e1;
+        }
+        .number { font-size: 100px; font-weight: 700; color: #1e3a8a; line-height: 1; }
+        .number-label { font-size: 24px; font-weight: 700; margin-top: 12px; color: #475569; }
+
+        /* Image */
+        .image-wrapper { border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; height: 380px; }
+        .image-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Chart */
+        .area-chart-svg { width: 100%; height: 300px; }
+        .grid line { stroke: #cbd5e1; stroke-width: 1; }
+        .area-fill { fill: rgba(30, 58, 138, 0.06); }
+        .line-stroke { stroke: #1e3a8a; stroke-width: 4; fill: none; }
+
+        /* Tag badge */
+        .badge {
+            display: inline-block;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 4px 14px;
+            border-radius: 999px;
+            border: 1px solid #bfdbfe;
+            margin-bottom: 20px;
+        }
+
+        /* Flow */
+        .flow { display: flex; gap: 0; align-items: stretch; width: 100%; }
+        .flow-step {
+            flex: 1;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-top: 4px solid #1e3a8a;
+            border-radius: 12px;
+            padding: 30px 24px;
+            text-align: center;
+        }
+        .flow-step + .flow-step { margin-left: 12px; }
+        .flow-step .num {
+            width: 36px; height: 36px;
+            background: #1e3a8a; color: white;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700;
+            margin: 0 auto 14px;
+        }
+        .flow-step h3 { font-size: 20px; margin-bottom: 8px; color: #0f172a; }
+        .flow-step p { font-size: 17px; color: #64748b; }
+        .flow-arrow { display: flex; align-items: center; font-size: 22px; color: #94a3b8; padding: 0 4px; flex-shrink: 0; }
+
+        .qa-layout { text-align: center; width: 100%; }
+        .strong-blue { color: #1e3a8a; font-weight: 700; }
+    </style>
+</head>
+<body>
+
+<!-- Slide 1: タイトル -->
+<div class="slide-container" id="slide1">
+    <span class="slide-num">1 / 12</span>
+    <div class="title-layout">
+        <div class="badge">不動産デベロッパー向け SaaS</div>
+        <h1>用地仕入れ収益シミュレーター<br><span>「土地判定」</span>のご提案</h1>
+        <p style="font-size: 24px; color: #475569; margin-top: 28px;">PDFやメールを貼るだけ。AIが物件情報を自動抽出し、<br>容積率・建築費・利益率まで数秒で算出します。</p>
+    </div>
+</div>
+
+<!-- Slide 2: 課題 -->
+<div class="slide-container" id="slide2">
+    <span class="slide-num">2 / 12</span>
+    <h2 class="slide-title">用地仕入れにおける実務上の課題</h2>
+    <div class="content-area">
+        <div class="two-column tiled">
+            <div>
+                <h3>📄 調査・計算に膨大な時間</h3>
+                <p>役所調査・周辺相場確認・ボリュームチェックなど、1物件の一次判断に数日かかる。審査業務の圧迫が生じている。</p>
+            </div>
+            <div>
+                <h3>⏱ 検討スピードの遅れによる機会損失</h3>
+                <p>社内検討を回している間に他社に買われてしまう、またはリスク回避のために優良案件を見逃してしまうケースがある。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 3: システム概要 -->
+<div class="slide-container" id="slide3">
+    <span class="slide-num">3 / 12</span>
+    <h2 class="slide-title">システム概要：データに基づく用地診断</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div>
+                <p>「土地判定」は、不動産デベロッパーの迅速かつ確実な意思決定を支援する業務効率化プラットフォームです。</p>
+                <ul style="margin-top: 22px; padding-left: 22px; color: #334155;">
+                    <li style="margin-bottom: 14px;">AI（Gemini）がPDF・メールから物件情報を自動抽出</li>
+                    <li style="margin-bottom: 14px;">国交省21万件の取引データをもとに相場を自動取得</li>
+                    <li style="margin-bottom: 14px;">担当者の経験に頼らない、組織的な判断基準を構築</li>
+                </ul>
+            </div>
+            <div class="image-wrapper">
+                <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=600&q=80" alt="意思決定イメージ">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 4: 使い方フロー -->
+<div class="slide-container" id="slide4">
+    <span class="slide-num">4 / 12</span>
+    <h2 class="slide-title">3ステップで採算判断まで完了</h2>
+    <div class="content-area">
+        <div class="flow">
+            <div class="flow-step">
+                <div class="num">1</div>
+                <h3>資料を貼り付け or アップロード</h3>
+                <p>メール本文をコピペ、またはPDFをドラッグ＆ドロップ。難しい操作は一切不要。</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="num">2</div>
+                <h3>AIが物件情報を自動抽出</h3>
+                <p>住所・面積・用途地域・道路幅員・価格目線をGemini AIが瞬時に読み取る。</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="num">3</div>
+                <h3>採算レポートを確認</h3>
+                <p>実行容積率・建築費・出口価格・利益率・道路斜線まで即座に算出・表示。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 5: 基本機能3つ -->
+<div class="slide-container" id="slide5">
+    <span class="slide-num">5 / 12</span>
+    <h2 class="slide-title">実務を支える3つの基本機能</h2>
+    <div class="content-area">
+        <div class="tiled-content">
+            <div class="tile">
+                <div class="icon"><i class="fa-solid fa-robot"></i></div>
+                <h3>AI自動抽出</h3>
+                <p>PDF・メールどちらにも対応。手入力ゼロで物件概要を読み込み、そのままシミュレーションへ。</p>
+            </div>
+            <div class="tile">
+                <div class="icon"><i class="fa-solid fa-calculator"></i></div>
+                <h3>事業収支の自動試算</h3>
+                <p>建築費・諸経費・出口坪単価・純利益・利益率を自動計算。仕入価格を変えたシナリオ分析も可能。</p>
+            </div>
+            <div class="tile">
+                <div class="icon"><i class="fa-solid fa-map-location-dot"></i></div>
+                <h3>周辺市場データの集約</h3>
+                <p>国交省取引データ・公示地価・中古マンション相場を自動取得。適正な買付価格の根拠を裏付けます。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 6: 法規制・ボリューム試算 -->
+<div class="slide-container bleed-image-layout" id="slide6">
+    <span class="slide-num" style="color: #94a3b8; position: absolute; bottom: 24px; right: 36px; font-size: 13px; font-family: Inter, sans-serif;">6 / 12</span>
+    <div class="content-container">
+        <h2 class="slide-title" style="border: none; padding: 0; margin-bottom: 28px;">法規制を考慮したボリューム・斜線試算</h2>
+        <div class="content-area">
+            <p style="margin-bottom: 22px;">建築基準法に準拠した基本的なボリュームをシステム内でシミュレーション。</p>
+            <ul style="padding-left: 22px; color: #334155;">
+                <li style="margin-bottom: 14px;">前面道路幅員から<strong style="color:#1e3a8a;">実行容積率</strong>を自動計算</li>
+                <li style="margin-bottom: 14px;">住居系1:1.25 / 商業系1:1.5の<strong style="color:#1e3a8a;">道路斜線制限</strong>を即表示</li>
+                <li style="margin-bottom: 14px;">天空率・日影規制の簡易試算も搭載</li>
+            </ul>
+            <p style="margin-top: 22px;">複数のプラン比較で判断精度を落とさずに検討数を増やせます。</p>
+        </div>
+    </div>
+    <div>
+        <img class="bleed-image-side" src="https://images.unsplash.com/photo-1503387762458-bf52d401dbd6?auto=format&fit=crop&w=600&q=80" alt="建築・図面イメージ">
+    </div>
+</div>
+
+<!-- Slide 7: 効率化実績 -->
+<div class="slide-container" id="slide7">
+    <span class="slide-num">7 / 12</span>
+    <h2 class="slide-title">検討業務の効率化</h2>
+    <div class="content-area">
+        <div class="highlight-numbers-layout">
+            <div class="number-box">
+                <div class="number">3<span style="font-size: 44px;">秒</span></div>
+                <div class="number-label">PDF読み込み→採算表示まで</div>
+            </div>
+            <div>
+                <h3 style="font-size: 28px; margin-bottom: 18px; color: #1e3a8a;">1物件の一次判断にかかる時間を大幅に圧縮</h3>
+                <p>これまで属人的だった初期調査ステップを効率化。情報の収集と自動計算により、準備での消耗する時間を減らし、本当に注力すべき優良案件の現地調査や交渉に時間を割くことができます。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 8: 従来との比較 -->
+<div class="slide-container" id="slide8">
+    <span class="slide-num">8 / 12</span>
+    <h2 class="slide-title">従来の実務フローとの比較</h2>
+    <div class="content-area">
+        <div class="table-layout">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">比較項目</th>
+                        <th style="width: 37.5%;">従来の手法（手作業・アナログ）</th>
+                        <th style="width: 37.5%;">「土地判定」導入後</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>初期検討の所要時間</strong></td>
+                        <td>数日〜1週間程度</td>
+                        <td><strong>最短 3秒で概算を算出</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>判断基準の均一化</strong></td>
+                        <td>担当者の経験値に依存</td>
+                        <td><strong>客観的な統計データを共有</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>社内共有のスピード</strong></td>
+                        <td>個別資料を作成後に報告</td>
+                        <td><strong>URLシェアでリアルタイム共有</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>複数物件の比較</strong></td>
+                        <td>手作業で比較表を作成</td>
+                        <td><strong>物件比較機能で並列表示</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>交渉への活用</strong></td>
+                        <td>根拠資料の準備に時間がかかる</td>
+                        <td><strong>データ裏付きで迅速な買付</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 9: データ蓄積 -->
+<div class="slide-container" id="slide9">
+    <span class="slide-num">9 / 12</span>
+    <h2 class="slide-title">豊富なデータ基盤による試算の信頼性</h2>
+    <div class="content-area">
+        <div class="tiled-content">
+            <div class="tile" style="text-align: center;">
+                <div class="icon"><i class="fa-solid fa-database"></i></div>
+                <h3>213,304件</h3>
+                <p>国交省 不動産取引データ<br>（東京都内49市区）</p>
+            </div>
+            <div class="tile" style="text-align: center;">
+                <div class="icon"><i class="fa-solid fa-landmark"></i></div>
+                <h3>23区 全対応</h3>
+                <p>公示地価テーブル搭載<br>（2024年・区平均）</p>
+            </div>
+            <div class="tile" style="text-align: center;">
+                <div class="icon"><i class="fa-solid fa-brain"></i></div>
+                <h3>Gemini AI</h3>
+                <p>Google最新モデルで<br>PDF・テキストを高精度解析</p>
+            </div>
+        </div>
+        <p style="text-align: center; margin-top: 30px; font-size: 19px; color: #64748b;">蓄積された豊富な市場データを活用することで、実勢価格とのかい離を抑制し、リスクを管理した仕入れ計画を支援します。</p>
+    </div>
+</div>
+
+<!-- Slide 10: 組織活用 -->
+<div class="slide-container" id="slide10">
+    <span class="slide-num">10 / 12</span>
+    <h2 class="slide-title">組織全体での確実な案件管理</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div style="text-align: center;">
+                <div style="border-radius: 12px; width: 420px; height: 370px; overflow: hidden; margin: 0 auto; border: 1px solid #cbd5e1;">
+                    <img src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=600&q=80" alt="社内会議イメージ" style="width:100%; height:100%; object-fit: cover;">
+                </div>
+            </div>
+            <div>
+                <h3 style="color: #1e3a8a; font-size: 28px; margin-bottom: 22px;">「属人化」を脱し、組織として仕入れを進める</h3>
+                <ul style="padding-left: 22px; color: #334155;">
+                    <li style="margin-bottom: 16px;">URLシェアで検討結果をリアルタイム共有</li>
+                    <li style="margin-bottom: 16px;">物件比較機能で会議での合意形成をスムーズに</li>
+                    <li style="margin-bottom: 16px;">CSV出力で既存の社内フォーマットへ転記</li>
+                    <li style="margin-bottom: 16px;">履歴保存で過去の検討物件をいつでも呼び出し</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 11: 活用場面 -->
+<div class="slide-container" id="slide11">
+    <span class="slide-num">11 / 12</span>
+    <h2 class="slide-title">日常実務のさまざまな場面で活用可能</h2>
+    <div class="content-area">
+        <div class="tiled-content">
+            <div class="tile" style="padding: 0; background: transparent; border: none;">
+                <div class="image-wrapper" style="height: 210px; margin-bottom: 18px;">
+                    <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80" alt="案件持ち込みの一次判断">
+                </div>
+                <h3 style="font-size: 20px; margin-bottom: 8px;">物件持ち込み時の即時評価</h3>
+                <p style="font-size: 17px;">仲介会社から図面や概要書を受け取ったその場で、簡易ボリュームと概算採算を確認。</p>
+            </div>
+            <div class="tile" style="padding: 0; background: transparent; border: none;">
+                <div class="image-wrapper" style="height: 210px; margin-bottom: 18px;">
+                    <img src="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=400&q=80" alt="社内会議の円滑化">
+                </div>
+                <h3 style="font-size: 20px; margin-bottom: 8px;">社内会議・精査の迅速化</h3>
+                <p style="font-size: 17px;">共通のデータ指標をベースに議論できるため、会議での合意形成がスムーズになります。</p>
+            </div>
+            <div class="tile" style="padding: 0; background: transparent; border: none;">
+                <div class="image-wrapper" style="height: 210px; margin-bottom: 18px;">
+                    <img src="https://images.unsplash.com/photo-1556761175-4b46a572b786?auto=format&fit=crop&w=400&q=80" alt="仲介業者との信頼構築">
+                </div>
+                <h3 style="font-size: 20px; margin-bottom: 8px;">仲介会社への迅速な回答</h3>
+                <p style="font-size: 17px;">データに裏付けられた確実な理由とともに回答を返すことで、業者からの信頼が高まります。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 12: CTA -->
+<div class="slide-container" id="slide12">
+    <span class="slide-num">12 / 12</span>
+    <div class="qa-layout">
+        <h2 style="font-size: 50px; margin-bottom: 22px; color: #1e3a8a;">まずは貴社の実際の検討物件で<br>精度の検証（無料）が可能です</h2>
+        <p style="font-size: 24px; color: #334155; margin-bottom: 40px;">月5回まで無料トライアル。クレジットカード不要、登録から30秒で開始できます。</p>
+        <div style="background: #f8fafc; padding: 42px 60px; border-radius: 12px; display: inline-block; border: 1px solid #cbd5e1; border-top: 6px solid #1e3a8a;">
+            <p style="font-size: 24px; color: #0f172a; font-weight: 700; margin-bottom: 12px;">🔗 今すぐ試す</p>
+            <p style="font-size: 26px; color: #1e3a8a; font-weight: 700; margin-bottom: 16px;">tochihantei.vercel.app</p>
+            <p style="font-size: 19px; margin-top: 8px; color: #64748b;">ご導入・チーム利用のご相談：support@tochihantei.vercel.app</p>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
