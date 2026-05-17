@@ -1469,9 +1469,15 @@ export default function App() {
               const miscCost = simResult.report_data.expenses.find(e => e.name.includes('諸経費'))?.amount ?? 0;
               const ppNum = parseFloat(purchasePriceInput) * 10000;
               const hasPrice = purchasePriceInput.trim() && !isNaN(ppNum) && ppNum > 0;
-              const totalInvestment = (hasPrice ? ppNum : 0) + constCost + miscCost;
+              const acNum = parseFloat(assemblyCostInput) * 10000;
+              const hasAssembly = assemblyCostInput.trim() && !isNaN(acNum) && acNum > 0;
+              const totalInvestment = (hasPrice ? ppNum : 0) + (hasAssembly ? acNum : 0) + constCost + miscCost;
               const grossYield = hasPrice && totalInvestment > 0 ? (annualRent / totalInvestment) * 100 : null;
-              const maxPurchase = (annualRent / (targetYield / 100)) - constCost - miscCost;
+              const maxPurchase = (annualRent / (targetYield / 100)) - (hasAssembly ? acNum : 0) - constCost - miscCost;
+              const exitSalePrice = annualRent / (targetYield / 100);
+              const exitSellFees = exitSalePrice * 0.03 + 60000;
+              const devProfit = hasPrice ? exitSalePrice - totalInvestment - exitSellFees : null;
+              const devProfitRate = (devProfit !== null && totalInvestment > 0) ? devProfit / totalInvestment * 100 : null;
               return (
                 <div className="space-y-4">
                   {/* パラメータ設定 */}
@@ -1538,12 +1544,43 @@ export default function App() {
                     <div className="mt-3 p-3 bg-[#EFF6FF] rounded-lg flex justify-between items-center">
                       <div>
                         <p className="text-xs text-[#2563EB] font-medium">目標利回り{targetYield}%達成の上限仕入れ価格</p>
-                        <p className="text-xs text-[#6B7280]">建築費・諸経費控除後</p>
+                        <p className="text-xs text-[#6B7280]">建築費・諸経費{hasAssembly ? '・地上げ費' : ''}控除後</p>
                       </div>
                       <div className="text-right">
                         <span className="text-xl font-semibold text-[#1D4ED8]">{maxPurchase > 0 ? `${fmt(maxPurchase / 10000)}万円` : '－'}</span>
                       </div>
                     </div>
+                  </div>
+                  {/* 投資家売却Exit試算 */}
+                  <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                    <p className="text-xs font-medium text-[#374151] mb-1 pb-3 border-b border-[#F3F4F6]">投資家売却 Exit 試算（Cap Rate {targetYield}%）</p>
+                    <p className="text-xs text-[#9CA3AF] mb-4 pt-3">年間賃料 ÷ 目標利回りで投資家へ売却した場合の開発利益</p>
+                    {[
+                      { label: '投資家売却価格', value: `${fmt(exitSalePrice / 10000)}万円`, note: `年間賃料${fmt(annualRent / 10000)}万円 ÷ ${targetYield}%` },
+                      { label: '売却諸費用', value: `-${fmt(exitSellFees / 10000)}万円`, note: '仲介3%+6万円' },
+                      { label: '総投資額', value: `-${fmt(totalInvestment / 10000)}万円`, note: hasPrice ? `仕入${hasAssembly ? '+地上げ' : ''}+建築費+諸経費` : '建築費+諸経費のみ' },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                        <div>
+                          <span className="text-sm text-[#6B7280]">{row.label}</span>
+                          <p className="text-xs text-[#D1D5DB]">{row.note}</p>
+                        </div>
+                        <span className="text-sm font-medium text-[#111827]">{row.value}</span>
+                      </div>
+                    ))}
+                    {devProfit !== null ? (
+                      <div className={`mt-3 p-3 rounded-lg flex justify-between items-center ${devProfit >= 0 ? 'bg-[#F0FDF4]' : 'bg-[#FEF2F2]'}`}>
+                        <div>
+                          <p className={`text-xs font-medium ${devProfit >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>開発利益</p>
+                          {devProfitRate !== null && <p className="text-xs text-[#6B7280]">利益率 {devProfitRate.toFixed(1)}%</p>}
+                        </div>
+                        <span className={`text-xl font-semibold ${devProfit >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                          {fmt(devProfit / 10000)}万円
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#9CA3AF] text-center py-4">仕入れ価格を入力すると開発利益を計算します</p>
+                    )}
                   </div>
                 </div>
               );
@@ -1556,10 +1593,13 @@ export default function App() {
               const exitTotal = exitPerTsubo * landAreaTsubo;
               const ppNum = parseFloat(purchasePriceInput) * 10000;
               const hasPrice = purchasePriceInput.trim() && !isNaN(ppNum) && ppNum > 0;
-              const buyFees = hasPrice ? ppNum * 0.04 + 60000 : 0;
+              const acNum = parseFloat(assemblyCostInput) * 10000;
+              const hasAssembly = assemblyCostInput.trim() && !isNaN(acNum) && acNum > 0;
+              const totalPurchase = (hasPrice ? ppNum : 0) + (hasAssembly ? acNum : 0);
+              const buyFees = totalPurchase > 0 ? totalPurchase * 0.04 + 60000 : 0;
               const sellFees = exitTotal * 0.03 + 60000;
-              const grossProfit = hasPrice ? exitTotal - ppNum - buyFees - sellFees : null;
-              const profitRate = (grossProfit !== null && (ppNum + buyFees) > 0) ? grossProfit / (ppNum + buyFees) * 100 : null;
+              const grossProfit = (hasPrice || hasAssembly) ? exitTotal - totalPurchase - buyFees - sellFees : null;
+              const profitRate = (grossProfit !== null && (totalPurchase + buyFees) > 0) ? grossProfit / (totalPurchase + buyFees) * 100 : null;
               return (
                 <div className="space-y-4">
                   <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
@@ -1578,20 +1618,27 @@ export default function App() {
                         <span className="text-sm font-medium text-[#111827]">{row.value}</span>
                       </div>
                     ))}
-                    {hasPrice ? (
+                    {(hasPrice || hasAssembly) ? (
                       <>
-                        {[
-                          { label: '仕入れ総額', value: `-${fmt(ppNum / 10000)}万円` },
-                          { label: '仕入れ諸費用', value: `-${fmt(buyFees / 10000)}万円`, note: '仲介3%+登記1%+6万円' },
-                        ].map(row => (
-                          <div key={row.label} className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
-                            <div>
-                              <span className="text-sm text-[#6B7280]">{row.label}</span>
-                              {'note' in row && row.note && <p className="text-xs text-[#D1D5DB]">{row.note}</p>}
-                            </div>
-                            <span className="text-sm font-medium text-[#111827]">{row.value}</span>
+                        {hasPrice && (
+                          <div className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                            <span className="text-sm text-[#6B7280]">仕入れ価格</span>
+                            <span className="text-sm font-medium text-[#111827]">-{fmt(ppNum / 10000)}万円</span>
                           </div>
-                        ))}
+                        )}
+                        {hasAssembly && (
+                          <div className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                            <span className="text-sm text-[#6B7280]">地上げ費用</span>
+                            <span className="text-sm font-medium text-[#111827]">-{fmt(acNum / 10000)}万円</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center py-3 border-b border-[#F9FAFB]">
+                          <div>
+                            <span className="text-sm text-[#6B7280]">仕入れ諸費用</span>
+                            <p className="text-xs text-[#D1D5DB]">仲介3%+登記1%+6万円（仕入{hasAssembly ? '+地上げ' : ''}合計に対して）</p>
+                          </div>
+                          <span className="text-sm font-medium text-[#111827]">-{fmt(buyFees / 10000)}万円</span>
+                        </div>
                         <div className={`mt-3 p-3 rounded-lg flex justify-between items-center ${grossProfit !== null && grossProfit >= 0 ? 'bg-[#F0FDF4]' : 'bg-[#FEF2F2]'}`}>
                           <div>
                             <p className={`text-xs font-medium ${grossProfit !== null && grossProfit >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>粗利</p>
@@ -1603,7 +1650,7 @@ export default function App() {
                         </div>
                       </>
                     ) : (
-                      <p className="text-xs text-[#9CA3AF] text-center py-4">仕入れ価格を入力すると粗利を計算します</p>
+                      <p className="text-xs text-[#9CA3AF] text-center py-4">仕入れ価格または地上げ費用を入力すると粗利を計算します</p>
                     )}
                   </div>
                 </div>
