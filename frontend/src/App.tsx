@@ -166,6 +166,7 @@ export default function App() {
   const [occupancyRate, setOccupancyRate] = useState(95);
   const [targetYield, setTargetYield] = useState(5.0);
   const [rentalPriceInput, setRentalPriceInput] = useState('');
+  const [condoSalePriceInput, setCondoSalePriceInput] = useState('');
   // 詳細設定パラメータ
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advConstructionCost, setAdvConstructionCost] = useState(160);
@@ -281,6 +282,12 @@ export default function App() {
     const rp = simResult?.estimated_rental_price_per_tsubo;
     if (rp && rp > 0) setRentalPriceInput(Math.round(rp).toString());
   }, [simResult?.estimated_rental_price_per_tsubo]);
+
+  useEffect(() => {
+    if (simResult?.sales_price_per_tsubo) {
+      setCondoSalePriceInput((simResult.sales_price_per_tsubo / 10000).toFixed(0));
+    }
+  }, [simResult?.sales_price_per_tsubo]);
 
   useEffect(() => {
     if (!parsedData?.address) { setMapData(null); return; }
@@ -650,9 +657,17 @@ export default function App() {
     }
   };
 
+  const effectiveSalePricePerTsubo = simResult
+    ? (parseFloat(condoSalePriceInput) > 0 ? parseFloat(condoSalePriceInput) * 10000 : simResult.sales_price_per_tsubo)
+    : 0;
+  const condoExitTotal = simResult ? effectiveSalePricePerTsubo * simResult.net_area_tsubo : 0;
+  const condoTotalExpenses = simResult ? simResult.report_data.expenses.reduce((s, e) => s + e.amount, 0) : 0;
+  const condoNetProfit = simResult?.profit_total !== null && simResult !== null ? condoExitTotal - condoTotalExpenses : null;
+  const condoNetProfitMargin = (condoNetProfit !== null && condoExitTotal > 0) ? condoNetProfit / condoExitTotal * 100 : null;
+
   const chartData = (() => {
     if (!simResult) return [];
-    const totalSales = simResult.report_data.revenues[0]?.amount ?? 0;
+    const totalSales = condoExitTotal;
     const constructionCost = simResult.report_data.expenses.find(e => e.name.includes('建築費'))?.amount ?? 0;
     const center = simResult.purchase_price ?? constructionCost;
     const min = Math.max(0, center * 0.5);
@@ -1149,8 +1164,8 @@ export default function App() {
 
             {/* ===== 出口戦略サマリー ===== */}
             {(() => {
-              const condoProfit = simResult.profit_total;
-              const condoProfitRate = simResult.profit_margin;
+              const condoProfit = condoNetProfit;
+              const condoProfitRate = condoNetProfitMargin;
 
               const backendRp = simResult.estimated_rental_price_per_tsubo ?? 0;
               const rp = parseFloat(rentalPriceInput) || backendRp;
@@ -1253,25 +1268,46 @@ export default function App() {
 
             {/* ===== 分譲コンテンツ ===== */}
             {simMode === 'condo' && (<>
+            {/* 出口坪単価調整 */}
+            <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+              <p className="text-xs font-medium text-[#374151] mb-3 pb-3 border-b border-[#F3F4F6]">分譲 出口坪単価（調整可）</p>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="text-xs text-[#6B7280] block mb-1">出口坪単価（万円/坪）</label>
+                  <input
+                    type="number" value={condoSalePriceInput}
+                    onChange={e => setCondoSalePriceInput(e.target.value)}
+                    className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]"
+                  />
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">
+                    エリア推定値: {(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪
+                    （中古相場×{simResult.premium_multiplier.toFixed(1)}・エリア補正）
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-[#9CA3AF]">有効専有</p>
+                  <p className="text-sm font-medium text-[#374151]">{simResult.net_area_tsubo.toFixed(1)}坪</p>
+                </div>
+              </div>
+            </div>
             <div className="bg-white rounded-xl border border-[#E5E7EB] p-8 text-center">
               <p className="text-xs text-[#6B7280] mb-2 tracking-widest">想 定 出 口 総 額</p>
               <div>
                 <span className="text-[42px] font-medium text-[#111827] leading-none" style={{ letterSpacing: '-0.02em' }}>
-                  {fmt((simResult.report_data.revenues[0]?.amount ?? 0) / 10000)}
+                  {fmt(condoExitTotal / 10000)}
                 </span>
                 <span className="text-base text-[#9CA3AF] ml-1 font-normal">万円</span>
               </div>
               <p className="text-xs text-[#9CA3AF] mt-2">
-                専有{simResult.net_area_tsubo.toFixed(0)}坪 × 出口坪単価{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円ベース
-                （×{simResult.premium_multiplier.toFixed(1)}・エリア推定）
+                専有{simResult.net_area_tsubo.toFixed(0)}坪 × {(effectiveSalePricePerTsubo / 10000).toFixed(0)}万円/坪
               </p>
-              {simResult.profit_margin !== null && (
+              {condoNetProfitMargin !== null && (
                 <span className={`inline-block mt-3 text-xs px-4 py-1.5 rounded-full font-medium ${
-                  simResult.profit_margin >= 25 ? 'bg-[#DCFCE7] text-[#15803D]'
-                  : simResult.profit_margin >= 10 ? 'bg-[#FEF9C3] text-[#92400E]'
+                  condoNetProfitMargin >= 25 ? 'bg-[#DCFCE7] text-[#15803D]'
+                  : condoNetProfitMargin >= 10 ? 'bg-[#FEF9C3] text-[#92400E]'
                   : 'bg-[#FEE2E2] text-[#991B1B]'
                 }`}>
-                  利益率 想定 {simResult.profit_margin.toFixed(1)}%
+                  利益率 想定 {condoNetProfitMargin.toFixed(1)}%
                 </span>
               )}
             </div>
@@ -1324,16 +1360,16 @@ export default function App() {
                       <span className="text-sm text-[#6B7280]">{rv.name}</span>
                     </div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-sm font-medium text-[#111827]">{fmt(rv.amount / 10000)}</span>
+                      <span className="text-sm font-medium text-[#111827]">{fmt(condoExitTotal / 10000)}</span>
                       <span className="text-xs text-[#9CA3AF]">万円</span>
                     </div>
                   </div>
                 ))}
-                {simResult.profit_total !== null && (
+                {condoNetProfit !== null && (
                   <div className="flex justify-between items-center mt-3 p-3 bg-[#F0FDF4] rounded-lg">
                     <span className="text-sm font-medium text-[#15803D]">★ 想定利益</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-medium text-[#15803D]">{fmt(simResult.profit_total / 10000)}</span>
+                      <span className="text-lg font-medium text-[#15803D]">{fmt(condoNetProfit / 10000)}</span>
                       <span className="text-xs text-[#9CA3AF]">万円</span>
                     </div>
                   </div>
@@ -1393,8 +1429,8 @@ export default function App() {
                     <span className="font-medium text-[#111827]">{(simResult.condo_market_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-[#6B7280]">出口坪単価（想定）</span>
-                    <span className="font-medium text-[#2563EB]">{(simResult.sales_price_per_tsubo / 10000).toFixed(0)}万円/坪</span>
+                    <span className="text-[#6B7280]">出口坪単価（調整後）</span>
+                    <span className="font-medium text-[#2563EB]">{(effectiveSalePricePerTsubo / 10000).toFixed(0)}万円/坪</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-[#6B7280]">土地出口（更地売却）</span>
@@ -1485,31 +1521,31 @@ export default function App() {
             </div>
 
             {/* 総合判定 */}
-            {simResult.profit_margin !== null && (
+            {condoNetProfitMargin !== null && (
               <div className={`rounded-xl border p-5 ${
-                simResult.profit_margin >= 25 ? 'bg-[#F0FDF4] border-[#BBF7D0]'
-                : simResult.profit_margin >= 10 ? 'bg-[#FFFBEB] border-[#FDE68A]'
+                condoNetProfitMargin >= 25 ? 'bg-[#F0FDF4] border-[#BBF7D0]'
+                : condoNetProfitMargin >= 10 ? 'bg-[#FFFBEB] border-[#FDE68A]'
                 : 'bg-[#FEF2F2] border-[#FECACA]'
               }`}>
                 <p className={`text-sm font-medium mb-1 ${
-                  simResult.profit_margin >= 25 ? 'text-[#15803D]'
-                  : simResult.profit_margin >= 10 ? 'text-[#92400E]'
+                  condoNetProfitMargin >= 25 ? 'text-[#15803D]'
+                  : condoNetProfitMargin >= 10 ? 'text-[#92400E]'
                   : 'text-[#991B1B]'
                 }`}>
-                  {simResult.profit_margin >= 25 ? '✓ 収益性：良好'
-                    : simResult.profit_margin >= 10 ? '⚠ 収益性：要検討'
+                  {condoNetProfitMargin >= 25 ? '✓ 収益性：良好'
+                    : condoNetProfitMargin >= 10 ? '⚠ 収益性：要検討'
                     : '✗ 収益性：要注意'}
                 </p>
                 <p className={`text-xs leading-relaxed ${
-                  simResult.profit_margin >= 25 ? 'text-[#166534]'
-                  : simResult.profit_margin >= 10 ? 'text-[#78350F]'
+                  condoNetProfitMargin >= 25 ? 'text-[#166534]'
+                  : condoNetProfitMargin >= 10 ? 'text-[#78350F]'
                   : 'text-[#7F1D1D]'
                 }`}>
-                  {simResult.profit_margin >= 25
-                    ? `利益率${simResult.profit_margin.toFixed(1)}%。採算ラインを超えており、仕入れ交渉の余地があります。`
-                    : simResult.profit_margin >= 10
-                    ? `利益率${simResult.profit_margin.toFixed(1)}%。採算ライン（25%）には届いていません。仕入価格の再交渉または建築コストの見直しを検討してください。`
-                    : `利益率${simResult.profit_margin.toFixed(1)}%。採算割れリスクがあります。仕入価格・条件の大幅な見直しが必要です。`
+                  {condoNetProfitMargin >= 25
+                    ? `利益率${condoNetProfitMargin.toFixed(1)}%。採算ラインを超えており、仕入れ交渉の余地があります。`
+                    : condoNetProfitMargin >= 10
+                    ? `利益率${condoNetProfitMargin.toFixed(1)}%。採算ライン（25%）には届いていません。仕入価格の再交渉または建築コストの見直しを検討してください。`
+                    : `利益率${condoNetProfitMargin.toFixed(1)}%。採算割れリスクがあります。仕入価格・条件の大幅な見直しが必要です。`
                   }
                 </p>
               </div>
