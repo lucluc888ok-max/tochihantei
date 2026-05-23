@@ -167,6 +167,7 @@ export default function App() {
   const [targetYield, setTargetYield] = useState(5.0);
   const [rentalPriceInput, setRentalPriceInput] = useState('');
   const [condoSalePriceInput, setCondoSalePriceInput] = useState('');
+  const [landSalePriceInput, setLandSalePriceInput] = useState('');
   // 詳細設定パラメータ
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advConstructionCost, setAdvConstructionCost] = useState(160);
@@ -288,6 +289,12 @@ export default function App() {
       setCondoSalePriceInput((simResult.sales_price_per_tsubo / 10000).toFixed(0));
     }
   }, [simResult?.sales_price_per_tsubo]);
+
+  useEffect(() => {
+    if (simResult?.market_price_per_tsubo) {
+      setLandSalePriceInput((simResult.market_price_per_tsubo / 10000).toFixed(0));
+    }
+  }, [simResult?.market_price_per_tsubo]);
 
   useEffect(() => {
     if (!parsedData?.address) { setMapData(null); return; }
@@ -659,6 +666,9 @@ export default function App() {
 
   const effectiveSalePricePerTsubo = simResult
     ? (parseFloat(condoSalePriceInput) > 0 ? parseFloat(condoSalePriceInput) * 10000 : simResult.sales_price_per_tsubo)
+    : 0;
+  const effectiveLandPricePerTsubo = simResult
+    ? (parseFloat(landSalePriceInput) > 0 ? parseFloat(landSalePriceInput) * 10000 : simResult.market_price_per_tsubo)
     : 0;
   const condoExitTotal = simResult ? effectiveSalePricePerTsubo * simResult.net_area_tsubo : 0;
   const condoTotalExpenses = simResult ? simResult.report_data.expenses.reduce((s, e) => s + e.amount, 0) : 0;
@@ -1184,7 +1194,7 @@ export default function App() {
               const rentalDevProfitRate = (rentalDevProfit !== null && totalInvestment > 0) ? rentalDevProfit / totalInvestment * 100 : null;
 
               const landAreaTsubo = (parsedData?.area_sqm ?? 0) / TSUBO_RATIO;
-              const landExitTotal = simResult.market_price_per_tsubo * landAreaTsubo;
+              const landExitTotal = effectiveLandPricePerTsubo * landAreaTsubo;
               const totalPurchase = (hasPrice ? ppNum : 0) + (hasAssembly ? acNum : 0);
               const landBuyFees = totalPurchase > 0 ? totalPurchase * 0.04 + 60000 : 0;
               const landSellFees = landExitTotal * 0.03 + 60000;
@@ -1715,7 +1725,7 @@ export default function App() {
             {/* ===== 更地転売コンテンツ ===== */}
             {simMode === 'land' && (() => {
               const landAreaTsubo = (parsedData?.area_sqm ?? 0) / TSUBO_RATIO;
-              const exitPerTsubo = simResult.market_price_per_tsubo;
+              const exitPerTsubo = effectiveLandPricePerTsubo;
               const exitTotal = exitPerTsubo * landAreaTsubo;
               const ppNum = parseFloat(purchasePriceInput) * 10000;
               const hasPrice = purchasePriceInput.trim() && !isNaN(ppNum) && ppNum > 0;
@@ -1728,11 +1738,32 @@ export default function App() {
               const profitRate = (grossProfit !== null && (totalPurchase + buyFees) > 0) ? grossProfit / (totalPurchase + buyFees) * 100 : null;
               return (
                 <div className="space-y-4">
+                  {/* 売却坪単価調整 */}
+                  <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+                    <p className="text-xs font-medium text-[#374151] mb-3 pb-3 border-b border-[#F3F4F6]">更地 売却坪単価（調整可）</p>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="text-xs text-[#6B7280] block mb-1">売却坪単価（万円/坪）</label>
+                        <input
+                          type="number" value={landSalePriceInput}
+                          onChange={e => setLandSalePriceInput(e.target.value)}
+                          className="w-full border border-[#E5E7EB] rounded px-2 py-1.5 text-sm text-[#111827] bg-white focus:outline-none focus:border-[#2563EB]"
+                        />
+                        <p className="text-xs text-[#9CA3AF] mt-0.5">
+                          MLIT推定値: {(simResult.market_price_per_tsubo / 10000).toFixed(0)}万円/坪（宅地相場×1.1補正）
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-[#9CA3AF]">土地面積</p>
+                        <p className="text-sm font-medium text-[#374151]">{landAreaTsubo.toFixed(1)}坪</p>
+                      </div>
+                    </div>
+                  </div>
                   <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
                     <p className="text-xs font-medium text-[#374151] mb-4 pb-3 border-b border-[#F3F4F6]">更地転売試算</p>
                     {[
                       { label: '土地面積', value: `${landAreaTsubo.toFixed(1)}坪`, note: `${parsedData?.area_sqm.toFixed(1)}㎡` },
-                      { label: '売却想定坪単価', value: `${fmt(exitPerTsubo / 10000)}万円/坪`, note: 'MLIT宅地相場（補正込み）' },
+                      { label: '売却想定坪単価', value: `${fmt(exitPerTsubo / 10000)}万円/坪`, note: '調整後' },
                       { label: '売却想定総額', value: `${fmt(exitTotal / 10000)}万円`, note: '' },
                       { label: '売却側諸費用', value: `-${fmt(sellFees / 10000)}万円`, note: '仲介3%+6万円' },
                     ].map(row => (
