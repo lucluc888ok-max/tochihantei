@@ -7,6 +7,7 @@ from app.api.endpoints import simulator
 from app.api.endpoints import usage
 from app.api.endpoints import simulations
 from app.api.endpoints import share
+from app.api.endpoints import admin
 
 app = FastAPI(title="Land Purchase Simulator API")
 
@@ -14,6 +15,7 @@ app.include_router(simulator.router, prefix="/api", tags=["Simulator"])
 app.include_router(usage.router, prefix="/api", tags=["Usage"])
 app.include_router(simulations.router, prefix="/api", tags=["Simulations"])
 app.include_router(share.router, prefix="/api", tags=["Share"])
+app.include_router(admin.router, prefix="/api", tags=["Admin"])
 
 ALLOWED_ORIGINS = [
     "https://tochi-ai.com",

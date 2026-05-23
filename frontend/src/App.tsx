@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from './firebase';
+import { auth, AUTH_ENABLED, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail } from './firebase';
 import type { User } from './firebase';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 
@@ -50,6 +50,7 @@ const fetchNearbyStations = async (lat: number, lng: number): Promise<Station[]>
 };
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const STORAGE_KEY = 'tochihantei_history';
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL ?? '';
 
 interface SavedRecord {
   id: string;
@@ -63,6 +64,13 @@ interface CompareItem {
   label: string;
   parsedData: ParsedData;
   simResult: SimResult;
+}
+
+interface AdminUser {
+  uid: string;
+  email: string;
+  plan: string;
+  usage_this_month: number;
 }
 
 interface ParsedData {
@@ -168,6 +176,16 @@ export default function App() {
   const [rentalPriceInput, setRentalPriceInput] = useState('');
   const [condoSalePriceInput, setCondoSalePriceInput] = useState('');
   const [landSalePriceInput, setLandSalePriceInput] = useState('');
+  // パスワードリセット
+  const [isForgotMode, setIsForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  // メール確認
+  const [verificationSent, setVerificationSent] = useState(false);
+  // 管理者UI
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
   // 詳細設定パラメータ
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advConstructionCost, setAdvConstructionCost] = useState(160);
@@ -327,7 +345,8 @@ export default function App() {
     setAuthError('');
     if (loginPassword.length < 6) { setAuthError('パスワードは6文字以上にしてください'); return; }
     try {
-      await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const cred = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+      await sendEmailVerification(cred.user);
       setLoginEmail(''); setLoginPassword('');
     } catch {
       setAuthError('登録に失敗しました。このメールアドレスはすでに使用されている可能性があります');
@@ -338,6 +357,48 @@ export default function App() {
     if (!auth) return;
     await signOut(auth);
     setUser(null); setUsageCount(0); setLimitReached(false);
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    setAuthError('');
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail);
+      setForgotSent(true);
+    } catch {
+      setAuthError('メールの送信に失敗しました。アドレスをご確認ください');
+    }
+  };
+
+  const handleSendVerification = async () => {
+    if (!auth?.currentUser) return;
+    try {
+      await sendEmailVerification(auth.currentUser);
+      setVerificationSent(true);
+    } catch { /* ignore */ }
+  };
+
+  const loadAdminUsers = async () => {
+    if (!user) return;
+    setAdminLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setAdminUsers(await res.json());
+    } catch { /* ignore */ }
+    finally { setAdminLoading(false); }
+  };
+
+  const updateUserPlan = async (uid: string, plan: string) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    await fetch(`${BASE_URL}/api/admin/users/${uid}/plan`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ plan }),
+    });
+    await loadAdminUsers();
   };
 
   const loadCloudHistory = async (u: User) => {
@@ -710,39 +771,89 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
             <h2 className="text-lg font-semibold text-[#111827] mb-1">
-              {isRegisterMode ? 'アカウント登録' : 'ログイン'}
+              {isForgotMode ? 'パスワードリセット' : isRegisterMode ? 'アカウント登録' : 'ログイン'}
             </h2>
             <p className="text-xs text-[#6B7280] mb-6">tochi-ai.com</p>
-            <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#374151] mb-1">メールアドレス</label>
-                <input
-                  type="email" required value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                  placeholder="example@email.com"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#374151] mb-1">パスワード</label>
-                <input
-                  type="password" required value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                  placeholder={isRegisterMode ? '6文字以上' : ''}
-                />
-              </div>
-              {authError && <p className="text-xs text-red-500">{authError}</p>}
-              <button type="submit" className="w-full bg-[#2563EB] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#1D4ED8] transition-colors">
-                {isRegisterMode ? '登録する' : 'ログイン'}
-              </button>
-            </form>
-            <button
-              onClick={() => { setIsRegisterMode(v => !v); setAuthError(''); }}
-              className="mt-4 w-full text-center text-xs text-[#2563EB] hover:underline"
-            >
-              {isRegisterMode ? 'すでにアカウントをお持ちの方はログイン' : 'アカウントをお持ちでない方は登録'}
-            </button>
+
+            {isForgotMode ? (
+              forgotSent ? (
+                <div className="text-center py-4 space-y-3">
+                  <p className="text-sm text-[#374151]">リセットメールを送信しました。</p>
+                  <p className="text-xs text-[#6B7280]">メール内のリンクからパスワードを再設定してください。</p>
+                  <button
+                    onClick={() => { setIsForgotMode(false); setForgotSent(false); setForgotEmail(''); setAuthError(''); }}
+                    className="mt-2 text-xs text-[#2563EB] hover:underline"
+                  >
+                    ログイン画面に戻る
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-[#374151] mb-1">登録メールアドレス</label>
+                      <input
+                        type="email" required value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                        placeholder="example@email.com"
+                      />
+                    </div>
+                    {authError && <p className="text-xs text-red-500">{authError}</p>}
+                    <button type="submit" className="w-full bg-[#2563EB] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#1D4ED8] transition-colors">
+                      リセットメールを送る
+                    </button>
+                  </form>
+                  <button
+                    onClick={() => { setIsForgotMode(false); setAuthError(''); }}
+                    className="mt-4 w-full text-center text-xs text-[#2563EB] hover:underline"
+                  >
+                    ログイン画面に戻る
+                  </button>
+                </>
+              )
+            ) : (
+              <>
+                <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-[#374151] mb-1">メールアドレス</label>
+                    <input
+                      type="email" required value={loginEmail}
+                      onChange={e => setLoginEmail(e.target.value)}
+                      className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                      placeholder="example@email.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#374151] mb-1">パスワード</label>
+                    <input
+                      type="password" required value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                      className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                      placeholder={isRegisterMode ? '6文字以上' : ''}
+                    />
+                  </div>
+                  {authError && <p className="text-xs text-red-500">{authError}</p>}
+                  <button type="submit" className="w-full bg-[#2563EB] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#1D4ED8] transition-colors">
+                    {isRegisterMode ? '登録する' : 'ログイン'}
+                  </button>
+                </form>
+                <button
+                  onClick={() => { setIsRegisterMode(v => !v); setAuthError(''); }}
+                  className="mt-4 w-full text-center text-xs text-[#2563EB] hover:underline"
+                >
+                  {isRegisterMode ? 'すでにアカウントをお持ちの方はログイン' : 'アカウントをお持ちでない方は登録'}
+                </button>
+                {!isRegisterMode && (
+                  <button
+                    onClick={() => { setIsForgotMode(true); setForgotEmail(loginEmail); setAuthError(''); }}
+                    className="mt-2 w-full text-center text-xs text-[#9CA3AF] hover:text-[#6B7280] hover:underline"
+                  >
+                    パスワードを忘れた方はこちら
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -774,6 +885,14 @@ export default function App() {
               <button onClick={addToCompare} className="text-xs px-3 py-1.5 border border-[#2563EB] rounded-lg text-[#2563EB] hover:bg-blue-50 transition-colors">比較に追加</button>
             </>
           )}
+          {AUTH_ENABLED && user && ADMIN_EMAIL && user.email === ADMIN_EMAIL && (
+            <button
+              onClick={() => { setShowAdmin(v => !v); if (!showAdmin) loadAdminUsers(); }}
+              className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors"
+            >
+              管理
+            </button>
+          )}
           {AUTH_ENABLED && user && (
             <button onClick={handleLogout} className="text-xs px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:border-gray-400 transition-colors">
               ログアウト
@@ -799,6 +918,23 @@ export default function App() {
         </div>
       )}
 
+      {/* メール確認バナー */}
+      {AUTH_ENABLED && user && !user.emailVerified && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-2.5 flex items-center justify-center gap-3">
+          <p className="text-xs text-blue-800">メールアドレスの確認が完了していません。</p>
+          {verificationSent ? (
+            <span className="text-xs text-blue-600 font-medium">確認メールを送信しました</span>
+          ) : (
+            <button
+              onClick={handleSendVerification}
+              className="text-xs text-blue-700 font-medium underline hover:no-underline"
+            >
+              確認メールを再送する
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
         {/* 履歴パネル */}
@@ -819,6 +955,57 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        )}
+
+        {/* 管理者パネル */}
+        {showAdmin && (
+          <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+            <p className="text-xs font-medium text-[#374151] mb-3">ユーザー管理</p>
+            {adminLoading ? (
+              <p className="text-xs text-[#9CA3AF] text-center py-4">読み込み中...</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[#6B7280] border-b border-[#F3F4F6]">
+                    <th className="text-left py-2 font-medium">メールアドレス</th>
+                    <th className="text-left py-2 font-medium">プラン</th>
+                    <th className="text-left py-2 font-medium">今月利用</th>
+                    <th className="py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminUsers.map(u => (
+                    <tr key={u.uid} className="border-b border-[#F9FAFB] last:border-0">
+                      <td className="py-2.5 text-[#374151]">{u.email}</td>
+                      <td className="py-2.5">
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${u.plan === 'standard' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {u.plan}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-[#374151]">{u.usage_this_month}回</td>
+                      <td className="py-2.5 text-right">
+                        {u.plan === 'free' ? (
+                          <button
+                            onClick={() => updateUserPlan(u.uid, 'standard')}
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                          >
+                            標準に変更
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => updateUserPlan(u.uid, 'free')}
+                            className="px-2 py-1 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-50 transition-colors"
+                          >
+                            無料に戻す
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         )}

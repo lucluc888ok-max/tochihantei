@@ -5,6 +5,8 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
@@ -24,5 +26,5 @@ const app = hasConfig ? initializeApp(firebaseConfig) : null;
 export const auth = app ? getAuth(app) : null;
 export const AUTH_ENABLED = hasConfig;
 
-export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
+export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail };
 export type { User };
