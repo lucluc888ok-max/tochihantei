@@ -1050,6 +1050,20 @@ export default function App() {
                 <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type === 'application/pdf') {
+                      const dt = new DataTransfer();
+                      dt.items.add(file);
+                      if (fileInputRef.current) {
+                        fileInputRef.current.files = dt.files;
+                        fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                      }
+                    }
+                  }}
                   className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center p-6 cursor-pointer transition-colors
                     ${isAnalyzing ? 'border-[#2563EB] bg-blue-50' : 'border-[#E5E7EB] hover:border-[#2563EB] hover:bg-[#F9FAFB]'}`}
                 >
